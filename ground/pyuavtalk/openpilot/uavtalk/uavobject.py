@@ -135,7 +135,18 @@ class UAVObject:
 		self.updateEvent = threading.Condition()
 		self.updateCnt = 0
 		self.name = name
-
+		self.objMan = None
+		
+	def updated(self):
+		self.objMan.objLocallyUpdated(self)	
+	
+	
+	def waitUpdate(self, timeout=5):
+		self.objMan.waitObjUpdate(self, request=False, timeout=timeout)
+	
+	def getUpdate(self, timeout=.1):
+		self.objMan.waitObjUpdate(self, request=True, timeout=timeout)
+								
 	def addField(self, field):
 		self.fields.append(field)
 		

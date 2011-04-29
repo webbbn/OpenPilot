@@ -21,6 +21,7 @@ class ObjManager(object):
         
         
     def addObj(self, obj):
+        obj.objMan = self
         self.objs[obj.objId] = obj
         
     def getObj(self, objId):
@@ -89,14 +90,21 @@ class ObjManager(object):
             logging.debug(s)
             raise TimeoutException(s)
         
-    def requestAllMetaDataUpdate(self):
+    def objLocallyUpdated(self, obj):
+        # TODO: should check meta-data what to do
+        self.uavTalk.sendObject(obj)
+        
+    def requestAllObjUpdate(self):
         for objId, obj in self.objs.items():
-            if obj.isMetaData():
+            if not obj.isMetaData():
                 #print "GetMeta %s" % obj
                 try:
+                    logging.debug("Getting %s" % obj)
                     self.waitObjUpdate(obj, request=True, timeout=.1)
+                    logging.debug("  Getting %s" % obj.metadata)
+                    self.waitObjUpdate(obj.metadata, request=True, timeout=.1)
                 except TimeoutException:
-                    #print "Timeout"
+                    logging.debug("  TIMEOUT")
                     pass
                     
     def disableAllAutomaticUpdates(self):
