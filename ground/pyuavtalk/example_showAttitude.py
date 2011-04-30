@@ -13,89 +13,73 @@ def _hex02(value):
     
 class UavtalkDemo():
     
-    UAVOBJDEF_PATH = "D:\\Projects\\Fred\\OpenPilot\\git\\build\\uavobject-synthetics\\python"
-    PORT = (30-1)
-    
-    METHOD_OBSERVER = 1
-    METHOD_WAIT = 2
-    METHOD_GET = 3
-    
-    METHOD = METHOD_OBSERVER
-    
     def __init__(self):
-        try:
-            self.nbUpdates = 0
-            self.lastRateCalc = time.clock()
-            self.updateRate = 0
-            
-            print "Opening Port"
-            serPort = serial.Serial(UavtalkDemo.PORT, 57600, timeout=.5)
-            if not serPort.isOpen():
-                raise IOError("Failed to open serial port")
-            
-            print "Creating UavTalk"
-            self.uavTalk = UavTalk(serPort)
-            
-            print "Starting ObjectManager"
-            self.objMan = ObjManager(self.uavTalk, UavtalkDemo.UAVOBJDEF_PATH)
-            
-            print "Starting UavTalk"
-            self.uavTalk.start()
-            
-            print "Starting ConnectionManager"
-            self.connMan = ConnectionManager(self.uavTalk, self.objMan)
-            
-            print "Connecting...",
-            self.connMan.connect()
-            print "Connected"
-            
-            print "Getting all Data"
-            self.objMan.requestAllObjUpdate()
-            
-            print "SN:",
-            sn = self.objMan.FirmwareIAPObj.CPUSerial.value
-            print "".join(map(_hex02, sn))
-            
-            print "Current updatePeriod for AttitudeActual is",
-            print self.objMan.AttitudeActual.metadata.telemetryUpdatePeriod.value
-            
-            if UavtalkDemo.METHOD == UavtalkDemo.METHOD_OBSERVER or UavtalkDemo.METHOD == UavtalkDemo.METHOD_WAIT:            
-                print "Request fast periodic updates for AttitudeActual"
-                self.objMan.AttitudeActual.metadata.telemetryUpdateMode.value = UAVMetaDataObject.UpdateMode.PERIODIC
-                self.objMan.AttitudeActual.metadata.telemetryUpdatePeriod.value = 50
-                self.objMan.AttitudeActual.metadata.updated()
-              
-              
-            if UavtalkDemo.METHOD == UavtalkDemo.METHOD_OBSERVER:
-                print "Install Observer for AttitudeActual updates\n"
-                self.objMan.regObjectObserver(self.objMan.AttitudeActual, self, "_onAttitudeUpdate")
-                # Spin until we get interrupted
-                while True:
-                    time.sleep(1)
-                    
-            elif UavtalkDemo.METHOD == UavtalkDemo.METHOD_WAIT:
-                while True:
-                    self.objMan.AttitudeActual.waitUpdate()
-                    self._onAttitudeUpdate(self.objMan.AttitudeActual)
-            
-            elif UavtalkDemo.METHOD == UavtalkDemo.METHOD_GET:
-                while True:
-                    self.objMan.AttitudeActual.getUpdate()
-                    self._onAttitudeUpdate(self.objMan.AttitudeActual)
-                
-                
-        except KeyboardInterrupt:
-            pass
-        except Exception,e:
-            print
-            print "An error occured: ", e
-            print
-            traceback.print_exc()
+        self.nbUpdates = 0
+        self.lastRateCalc = time.clock()
+        self.updateRate = 0
+        self.objMan = None
+        self.connMan = None
         
-        print "Stopping UavTalk"
-        self.uavTalk.stop()
-        raw_input("Press ENTER, the application will close")
-
+    def setup(self, port, uavdefPath):
+        print "Opening Port"
+        serPort = serial.Serial(port, 57600, timeout=.5)
+        if not serPort.isOpen():
+            raise IOError("Failed to open serial port")
+        
+        print "Creating UavTalk"
+        self.uavTalk = UavTalk(serPort)
+        
+        print "Starting ObjectManager"
+        self.objMan = ObjManager(self.uavTalk, uavdefPath)
+        
+        print "Starting UavTalk"
+        self.uavTalk.start()
+        
+        print "Starting ConnectionManager"
+        self.connMan = ConnectionManager(self.uavTalk, self.objMan)
+        
+        print "Connecting...",
+        self.connMan.connect()
+        print "Connected"
+        
+        print "Getting all Data"
+        self.objMan.requestAllObjUpdate()
+        
+        print "SN:",
+        sn = self.objMan.FirmwareIAPObj.CPUSerial.value
+        print "".join(map(_hex02, sn))
+        
+    def stop(self):
+        if self.uavTalk:
+            print "Stopping UavTalk"
+            self.uavTalk.stop()
+        
+    def showAttitudeViaObserver(self):
+        print "Request fast periodic updates for AttitudeActual"
+        self.objMan.AttitudeActual.metadata.telemetryUpdateMode.value = UAVMetaDataObject.UpdateMode.PERIODIC
+        self.objMan.AttitudeActual.metadata.telemetryUpdatePeriod.value = 50
+        self.objMan.AttitudeActual.metadata.updated()
+        
+        print "Install Observer for AttitudeActual updates\n"
+        self.objMan.regObjectObserver(self.objMan.AttitudeActual, self, "_onAttitudeUpdate")
+        # Spin until we get interrupted
+        while True:
+            time.sleep(1)
+        
+    def showAttitudeViaWait(self):
+        print "Request fast periodic updates for AttitudeActual"
+        self.objMan.AttitudeActual.metadata.telemetryUpdateMode.value = UAVMetaDataObject.UpdateMode.PERIODIC
+        self.objMan.AttitudeActual.metadata.telemetryUpdatePeriod.value = 50
+        self.objMan.AttitudeActual.metadata.updated()
+        
+        while True:
+            self.objMan.AttitudeActual.waitUpdate()
+            self._onAttitudeUpdate(self.objMan.AttitudeActual)
+                    
+    def showAttitudeViaGet(self):
+        while True:
+            self.objMan.AttitudeActual.getUpdate()
+            self._onAttitudeUpdate(self.objMan.AttitudeActual)
         
     def _onAttitudeUpdate(self, args):
         self.nbUpdates += 1
@@ -126,5 +110,28 @@ if __name__ == '__main__':
     
     # Log everything, and send it to stderr.
     logging.basicConfig(level=logging.INFO)
+
+    try:
+        demo = UavtalkDemo()
+        demo.setup(30-1, "D:\\Projects\\Fred\\OpenPilot\\git\\build\\uavobject-synthetics\\python")
+        
+        demo.showAttitudeViaObserver()   # will not return
+            
+    except KeyboardInterrupt:
+        pass
+    except Exception,e:
+        print
+        print "An error occured: ", e
+        print
+        traceback.print_exc()
     
-    UavtalkDemo()
+    print
+    
+    try:
+        demo.stop()
+    except Exeption:
+        pass
+    
+    raw_input("Press ENTER, the application will close")
+
+
