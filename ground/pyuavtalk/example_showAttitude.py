@@ -20,11 +20,13 @@ class UavtalkDemo():
     METHOD_WAIT = 2
     METHOD_GET = 3
     
-    METHOD = METHOD_WAIT
+    METHOD = METHOD_OBSERVER
     
     def __init__(self):
         try:
             self.nbUpdates = 0
+            self.lastRateCalc = time.clock()
+            self.updateRate = 0
             
             print "Opening Port"
             serPort = serial.Serial(UavtalkDemo.PORT, 57600, timeout=.5)
@@ -95,11 +97,21 @@ class UavtalkDemo():
         raw_input("Press ENTER, the application will close")
 
         
-    def _onAttitudeUpdate(self, args):      
-        print "."*self.nbUpdates+" "*(10-self.nbUpdates),
+    def _onAttitudeUpdate(self, args):
         self.nbUpdates += 1
-        if self.nbUpdates > 10:
+        
+        now = time.clock()    
+        if now-self.lastRateCalc > 1:
+            self.updateRate = self.nbUpdates/(now-self.lastRateCalc) 
+            self.lastRateCalc = now
             self.nbUpdates = 0
+            
+        if self.nbUpdates & 1: 
+            dot = "." 
+        else: 
+            dot= " "
+        
+        print " %s Rate: %02.1f Hz  " % (dot, self.updateRate),
             
         roll = self.objMan.AttitudeActual.Roll.value
         print "Roll: %-4d " % roll,
