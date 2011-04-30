@@ -1,6 +1,7 @@
 import logging
 import serial
 import traceback
+import sys
 
 from openpilot.uavtalk.uavobject import *
 from openpilot.uavtalk.uavtalk import *
@@ -21,8 +22,12 @@ class UavtalkDemo():
         self.connMan = None
         
     def setup(self, port, uavdefPath):
-        print "Opening Port"
-        serPort = serial.Serial(port, 57600, timeout=.5)
+        print "Opening Port \"%s\"" % port
+        if port[:3].upper() == "COM":
+            _port = int(port[3:])-1
+        else:
+            _port = port
+        serPort = serial.Serial(_port, 57600, timeout=.5)
         if not serPort.isOpen():
             raise IOError("Failed to open serial port")
         
@@ -105,17 +110,63 @@ class UavtalkDemo():
         i = int((i+1)*15)
         print "-"*i+"*"+"-"*(30-i)+" \r",
         
+    def driveServo(self):
+        print "Taking control of self.actuatorCmd"
+        self.objMan.ActuatorCommand.metadata.access.value = UAVMetaDataObject.Access.READONLY
+        self.objMan.ActuatorCommand.metadata.updated()
+        
+        while True:
+            self.objMan.ActuatorCommand.Channel.value[0] = 1000
+            self.objMan.ActuatorCommand.updated()
+            time.sleep(1)
+            
+            self.objMan.ActuatorCommand.Channel.value[0] = 2000
+            self.objMan.ActuatorCommand.updated()
+            time.sleep(1)
+            
 
+def printUsage():
+    appName = os.path.basename(sys.argv[0])
+    print
+    print "usage:"
+    print "  %s port objDefPath o|w|g|s" % appName
+    print "  o: Show Attitude using an \"observer\""
+    print "  w: Show Attitude waiting for updates from flight"
+    print "  g: Show Attitude performing get operations"
+    print "  s: Drive Servo"
+    print
+    print "  for example: %s COM30 D:\Projects\Fred\OpenPilot\git\\build\uavobject-synthetics\python o" % appName
+    print 
+    
 if __name__ == '__main__':
     
+    if len(sys.argv) != 4:
+        print "ERROR: Incorrect number of arguments"
+        printUsage()
+        sys.exit(2)
+        
+    port, objPath, option = sys.argv[1:]
+
+    if option not in ["o","w","g","s"]:
+        print "ERROR: Invalid option"
+        printUsage()
+        sys.exit(2)
+
     # Log everything, and send it to stderr.
     logging.basicConfig(level=logging.INFO)
 
     try:
         demo = UavtalkDemo()
-        demo.setup(30-1, "D:\\Projects\\Fred\\OpenPilot\\git\\build\\uavobject-synthetics\\python")
-        
-        demo.showAttitudeViaObserver()   # will not return
+        demo.setup(port, objPath)
+
+        if option == "o":        
+            demo.showAttitudeViaObserver()      # will not return
+        elif option == "w":        
+            demo.showAttitudeViaWait()          # will not return
+        if option == "g":        
+            demo.showAttitudeViaGet()           # will not return
+        if option == "s":        
+            demo.driveServo()                   # will not return
             
     except KeyboardInterrupt:
         pass
@@ -129,7 +180,7 @@ if __name__ == '__main__':
     
     try:
         demo.stop()
-    except Exeption:
+    except Exception:
         pass
     
     raw_input("Press ENTER, the application will close")
