@@ -1,19 +1,33 @@
-#import os
-#import glob
-#import serial
+##
+##############################################################################
+#
+# @file       uavtalk.py
+# @author     The OpenPilot Team, http://www.openpilot.org Copyright (C) 2011.
+# @brief      Base classes for python UAVObject
+#   
+# @see        The GNU Public License (GPL) Version 3
+#
+#############################################################################/
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+# or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License
+# for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+#
+
+
 import time
-#import traceback
-
-#import inspect
-#import sys
-
 import logging
 import threading
-
-#from uavobject import *
-
-#from flighttelemetrystats import *
-
         
 SYNC = 0x3C
 VERSION_MASK = 0xFC
@@ -277,238 +291,3 @@ class UavTalk(object):
         self.txLock.release()
         
 
-
-class GyroLogger:
-    def __init__(self, obj):
-        self.data = None
-        self.obj = obj
-        self.cnt = 0
-        
-    def _onSensorData(self, args):
-        #print "_onSensorData", self.obj.accels.value
-        
-       
-        #self.data.append(obj.gyrosField.value)
-        if self.data != None:
-            self.cnt += 1
-            print "Log %d" % self.cnt
-            self.data.append((self.obj.gyros.value, self.obj.accels.value))
-        
-    def start(self, data):
-        self.data = data
-        self.cnt = 0
-        
-    def stop(self,):
-        self.data = None
-     
-class Test(object):
-    
-    def _logSensors(self, testName, log):
-        
-            file = self.logFile
-            
-            file.write("%s\n" % testName)
-            
-            file.write("GyroX")
-            for i in log:
-                file.write(",%f" % i[0][0])
-            file.write("\n")    
-            file.write("GyroY")
-            for i in log:
-                file.write(",%f" % i[0][1])
-            file.write("\n")    
-            file.write("GyroZ")
-            for i in log:
-                file.write(",%f" % i[0][2])
-            file.write("\n")
-                
-            file.write("AccX")
-            for i in log:
-                file.write(",%f" % i[1][0])
-            file.write("\n")    
-            file.write("AccY")
-            for i in log:
-                file.write(",%f" % i[1][1])
-            file.write("\n")    
-            file.write("AccZ")
-            for i in log:
-                file.write(",%f" % i[1][2])
-            file.write("\n")
-            
-            file.write("\n")    
-            
-    def _setServos(self, servo1Pos, servo2Pos):
-        self.actuatorCmd.Channel.value[4] = servo1Pos
-        self.actuatorCmd.Channel.value[5] = servo2Pos
-        self.uavTalk.sendObject(self.actuatorCmd)
-            
-    def _testSensors(self, gl, newServo1Pos, newServo2Pos, log):
-        gl.start(log)
-        time.sleep(.5)
-        self._setServos(newServo1Pos, newServo2Pos)
-        time.sleep(1.5)
-        gl.stop()
- 
-    def __init__(self):
-        
-        self.logFile = open("testData.csv", "w")
-        
-        if True:
-            serPort = serial.Serial(30-1, 57600, timeout=.5)
-            if not serPort.isOpen():
-                raise IOError("Failed to open serial port")
-        else:
-            serPort = TestSerial()
-        
-        logging.info("port Open")
-        
-        self.uavTalk = UavTalk(serPort)
-        objMan = ObjManager(self.uavTalk, 'D:\Projects\Fred\OpenPilot\SVN\ground\uavobjgenerator\debug\python')
-        self.uavTalk.objMan = objMan
-
-        import flighttelemetrystats
-        import gcstelemetrystats      
-        
-        connMan = ConnectionManager(self.uavTalk, objMan)
-        
-        try:
-            self.uavTalk.start()
-            
-#            self.ftsObj = objMan.getObj(flighttelemetrystats.FlightTelemetryStats.OBJID)
-#            while True:
-#                objMan.waitObjUpdate(self.ftsObj, request=False, timeout=5)
-#                logging.info("FTS State=%d TxFail=%3d RxFail=%3d TxRetry=%3d" % \
-#                     (self.ftsObj.Status.value, self.ftsObj.TxFailures.value, self.ftsObj.RxFailures.value, self.ftsObj.TxRetries.value))
-#                time.sleep(1)
-                
-            print "Connecting"
-            connMan.connect()
-            print "=====> CONNECTED <====="
-                    
-                
-            print "Getting all MetaData"
-            objMan.requestAllMetaDataUpdate()
-                
-            print "Disabling automatic updates"
-            objMan.disableAllAutomaticUpdates()
-            
-#            while True:
-#                time.sleep(1)
-#            time.sleep(5)
-                        
-            actuatorcommand = sys.modules["actuatorcommand"]
-            self.actuatorCmd = objMan.getObj(actuatorcommand.ActuatorCommand.OBJID)
-            actuatorCmdMeta = self.actuatorCmd.metadata
-            
-            attituderaw = sys.modules["attituderaw"]
-            self.attitudeRaw = objMan.getObj(attituderaw.AttitudeRaw.OBJID)
-            attitudeRawMeta = self.attitudeRaw.metadata
-            
-            print "Getting objects"
-            objMan.waitObjUpdate(actuatorCmdMeta)
-            objMan.waitObjUpdate(self.actuatorCmd)
-            
-            print "Taking control of self.actuatorCmd"
-            actuatorCmdMeta.access.value = UAVMetaDataObject.Access.READONLY
-            self.uavTalk.sendObject(actuatorCmdMeta)
-            
-            print "Fast AttitudeRaw"
-            attitudeRawMeta.telemetryUpdateMode.value = UAVMetaDataObject.UpdateMode.PERIODIC
-            attitudeRawMeta.telemetryUpdatePeriod.value = 20
-            self.uavTalk.sendObject(attitudeRawMeta)
-            
-#            while True:
-#                print "====> TIME"
-#                time.sleep(1)
-                
-            time.sleep(1)
-            
-            
-            print "Start testing"
- 
-            gl = GyroLogger(self.attitudeRaw)
-            objMan.regObjectObserver(self.attitudeRaw, gl, "_onSensorData")
-            
-            
-            
-            
-            ROT = 5
-            TLT = 4
-            ROT_C = 1250
-            
-            ROT_L = ROT_C + 950
-            ROT_R = ROT_C - 950
-            
-            TLT_C = 1210
-            TLT_F = TLT_C + 950
-            TLT_B = TLT_C - 950
-            
-            self.levelLog = []
-            self.yawRLog = []
-            self.yawLLog = []
-            self.RotFWLog = []
-            self.FWLog = []
-            self.RotBWLog = []
-            self.BWLog = []
-            
-            # Level
-            self._setServos(TLT_C, ROT_C)
-            self._testSensors(gl, TLT_C, ROT_C, self.levelLog)
-            self._logSensors("Level", self.levelLog)
-            
-            
-            # Yaw
-            self._setServos(TLT_C, ROT_L)
-            time.sleep(1)
-            self._testSensors(gl, TLT_C, ROT_R, self.yawRLog)
-            self._logSensors("YawR", self.yawRLog)
-            
-            self._testSensors(gl, TLT_C, ROT_L, self.yawLLog)
-            self._logSensors("YawL", self.yawLLog)
-            
-            self.actuatorCmd.Channel.value[ROT] = ROT_L
-            self.uavTalk.sendObject(self.actuatorCmd)
-            
-            # Tilt
-            self._setServos(TLT_B, ROT_C)
-            time.sleep(1)
-            self._testSensors(gl, TLT_F, ROT_C, self.RotFWLog)
-            self._logSensors("RotFW", self.RotFWLog)
-
-            time.sleep(1)
-            self._testSensors(gl, TLT_F, ROT_C, self.FWLog)
-            self._logSensors("FW", self.FWLog)
-            
-            self._testSensors(gl, TLT_B, ROT_C, self.RotBWLog)
-            self._logSensors("RotBW", self.RotBWLog)
-
-            time.sleep(1)
-            self._testSensors(gl, TLT_B, ROT_C, self.BWLog)
-            self._logSensors("BW", self.BWLog)
-            
-            self._setServos(TLT_C, ROT_C)
-                        
-            attitudeRawMeta.telemetryUpdateMode.value = UAVMetaDataObject.UpdateMode.PERIODIC
-            attitudeRawMeta.telemetryUpdatePeriod.value = 200
-            self.uavTalk.sendObject(attitudeRawMeta)
-            
-            self.uavTalk.stop()
-                
-               # uavTalk.sendObject(flightTelemetryStats, reqAck=True)
-        #except KeyboardInterrupt:
-        #    uavTalk.stop()
-        except BaseException,e:
-            print
-            print "An error occured: ", e
-            print
-            traceback.print_exc()
-            self.uavTalk.stop()
-            raw_input("Press ENTER, the application will close")
-       
-
-if __name__ == '__main__':
-
-        # Log everything, and send it to stderr.
-        logging.basicConfig(level=logging.INFO)
-        
-        Test()
