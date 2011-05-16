@@ -46,25 +46,6 @@ CHECKSUM_LENGTH = 1
 MAX_PACKET_LENGTH = (MAX_HEADER_LENGTH + MAX_PAYLOAD_LENGTH + CHECKSUM_LENGTH)
     
 
-
-
-class TestSerial(object):
-    RX = (0x3c,0x22,0x1d, 0x0, 0x5e, 0x26, 0xc, 0x66, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x96 )
-    
-    def __init__(self):
-        self.i = 0
-        
-    def read(self, nbBytes):
-        if self.i < len(TestSerial.RX):
-            self.i += 1
-            return chr(TestSerial.RX[self.i-1])
-        else:
-            time.sleep(.1)
-            return ""
-        
-    def write(self, data):
-        print map(hex, map(ord, data))
- 
         
 
 class Crc(object):
