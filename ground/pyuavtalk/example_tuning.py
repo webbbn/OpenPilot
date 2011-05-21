@@ -36,50 +36,150 @@ from openpilot.uavtalk.uavtalk import *
 from openpilot.uavtalk.objectManager import *
 from openpilot.uavtalk.connectionManager import *
     
-PORT = 29
-UAVDEFPATH = "D:\Projects\Fred\OpenPilot\git\\build\uavobject-synthetics\python"
 
 
-
+def printUsage():
+    appName = os.path.basename(sys.argv[0])
+    print
+    print "usage:"
+    print "  %s port objDefPath " % appName
+    print "  for example: %s COM30 D:\Projects\Fred\OpenPilot\git\\build\uavobject-synthetics\python " % appName
+    print 
+    
 if __name__ == '__main__':
-
     try:
-        serPort = serial.Serial(PORT, 57600, timeout=.5)
-        uavTalk = UavTalk(serPort)
-        objMan = ObjManager(uavTalk, UAVDEFPATH)
-        uavTalk.start()
+        if len(sys.argv) != 3:
+          print "ERROR: Incorrect number of arguments"
+          printUsage()
+          sys.exit(2)
         
+        port, objPath = sys.argv[1:]
+    
+        if port[:3].upper() == "COM":
+            _port = int(port[3:])-1
+        else:
+            _port = port
+            
+        serPort = serial.Serial(_port, 57600, timeout=.5)
+        uavTalk = UavTalk(serPort)
+        objMan = ObjManager(uavTalk, objPath)
+        uavTalk.start()
+
+        print "Getting Current Settings:"        
         while True:
             try:
                 time.sleep(.5)
                 objMan.StabilizationSettings.getUpdate()
-                print objMan.StabilizationSettings.PitchPI.value
                 break
             except TimeoutException:
                 print "Timeout"
-        
-                                                    
+
         while True:
-            try:
-                # get update of ManualControlCommand 
-                objMan.ManualControlCommand.getUpdate()  
-                
-                # calculate value out of Accessory1 input (-1 ... +1)
-                txControl = objMan.ManualControlCommand.Accessory1.value
-                value = 15 + txControl * 10
-                objMan.StabilizationSettings.PitchPI.value[0] = value
-                objMan.StabilizationSettings.updated()
-                
-                print "\r%-1.2f => %2.4f" % (txControl, value),
-                time.sleep(.1)
-                
-            except TimeoutException:
-                print "Timeout"
-        
-        print
-        
-    except KeyboardInterrupt:
-        pass
+            while True:        
+                print
+                print
+                print "0. Quit"
+                print
+                print "1. Tune  Roll  Rate      %2.4f %2.4f %2.4f" % tuple(objMan.StabilizationSettings.RollRatePI.value)
+                print "2. Tune  Pitch Rate      %2.4f %2.4f %2.4f" % tuple(objMan.StabilizationSettings.PitchRatePI.value)
+                print "3. Tune  Yaw   Rate      %2.4f %2.4f %2.4f" % tuple(objMan.StabilizationSettings.YawRatePI.value)
+                print
+                print "4. Tune  Roll  Attitude  %2.4f %2.4f %2.4f" % tuple(objMan.StabilizationSettings.RollPI.value)
+                print "5. Tune  Pitch Attitude  %2.4f %2.4f %2.4f" % tuple(objMan.StabilizationSettings.PitchPI.value)
+                print "6. Tune  Yaw   Attitude  %2.4f %2.4f %2.4f" % tuple(objMan.StabilizationSettings.YawPI.value)
+                print
+                sel = raw_input()
+                if len(sel) != 1:
+                    continue
+                elif sel == "0":
+                    exit(0)
+                elif sel == "1":
+                    PI = objMan.StabilizationSettings.RollRatePI.value
+                    break
+                elif sel == "2":
+                    PI = objMan.StabilizationSettings.PitchRatePI.value
+                    break
+                elif sel == "3":
+                    PI = objMan.StabilizationSettings.YawRatePI.value
+                    break
+                elif sel == "4":
+                    PI = objMan.StabilizationSettings.RollPI.value
+                    break
+                elif sel == "5":
+                    PI = objMan.StabilizationSettings.PitchPI.value
+                    break
+                elif sel == "6":
+                    PI = objMan.StabilizationSettings.YawPI.value
+                    break
+            
+            while True:        
+                print
+                print 
+                print "0. Quit"
+                print
+                print "1. tune K       %2.4f" % PI[0]
+                print "2. tune I       %2.4f" % PI[1]
+                print "3. tune I Limit %2.4f" % PI[2]
+                sel = raw_input()
+                if len(sel) != 1:
+                    continue
+                elif sel == "0":
+                    exit(0)
+                elif sel == "1":
+                    PIIndex = 0
+                    break
+                elif sel == "2":
+                    PIIndex = 1
+                    break
+                elif sel == "3":
+                    PIIndex = 2
+                    break
+            
+            print
+            
+            while True:
+                try:
+                    print "Current value: %2.4f" % PI[PIIndex]        
+                    print "Tune-range from",
+                    tuneFrom = float(raw_input())
+                    print "Tune-range to",
+                    tuneTo = float(raw_input())
+                    break
+                except Exception:
+                    pass
+                                
+                                
+            print
+            print     
+            cnt = 0 
+            while True:
+                try:
+                    # get update of ManualControlCommand 
+                    objMan.ManualControlCommand.getUpdate(timeout=.5)  
+                    
+                    # calculate value out of Accessory1 input (-1 ... +1)
+                    txControl = objMan.ManualControlCommand.Accessory1.value
+                    value = tuneFrom + ((txControl+1)/2)*(tuneTo-tuneFrom)
+                    PI[PIIndex] = value
+                    objMan.StabilizationSettings.updated()
+                    
+                    print "\r%-1.2f => %2.4f" % (txControl, value),
+                    time.sleep(.1)
+                    cnt +=1 
+                    if cnt>=20:
+                        print "\a",
+                        time.sleep(.05)
+                        print "\a",
+                        cnt = 0
+                    
+                except TimeoutException:
+                    print "Timeout \a"
+                except KeyboardInterrupt:
+                    break
+            
+            print
+            
+    
     except Exception,e:
         print
         print "An error occured: ", e
@@ -87,6 +187,7 @@ if __name__ == '__main__':
         traceback.print_exc()
     
     try:
+        print "Stop"
         uavTalk.stop()
     except Exception:
         pass
