@@ -64,6 +64,8 @@ if __name__ == '__main__':
         uavTalk = UavTalk(serPort)
         objMan = ObjManager(uavTalk, objPath)
         uavTalk.start()
+        
+        import objectpersistence
 
         print "Getting Current Settings:"        
         while True:
@@ -78,7 +80,8 @@ if __name__ == '__main__':
             while True:        
                 print
                 print
-                print "0. Quit"
+                print "q. Quit"
+                print "s. Save settings"
                 print
                 print "1. Tune  Roll  Rate      %2.4f %2.4f %2.4f" % tuple(objMan.StabilizationSettings.RollRatePI.value)
                 print "2. Tune  Pitch Rate      %2.4f %2.4f %2.4f" % tuple(objMan.StabilizationSettings.PitchRatePI.value)
@@ -91,8 +94,22 @@ if __name__ == '__main__':
                 sel = raw_input()
                 if len(sel) != 1:
                     continue
-                elif sel == "0":
+                elif sel == "q":
                     exit(0)
+                elif sel == "s":
+                    print "Saving ",
+                    objMan.ObjectPersistence.Operation.value = objectpersistence.OperationField.SAVE
+                    objMan.ObjectPersistence.Selection.value = objectpersistence.SelectionField.SINGLEOBJECT
+                    objMan.ObjectPersistence.ObjectID.value = objMan.StabilizationSettings.objId
+                    objMan.ObjectPersistence.InstanceID.value = objMan.StabilizationSettings.instId
+                    objMan.ObjectPersistence.updated()
+                    for i in range(10):
+                        print ".",
+                        objMan.ObjectPersistence.getUpdate(timeout=1)
+                        if objMan.ObjectPersistence.Operation.value == objectpersistence.OperationField.COMPLETED:
+                            print "Done"
+                            break
+                    print        
                 elif sel == "1":
                     PI = objMan.StabilizationSettings.RollRatePI.value
                     break
@@ -115,7 +132,7 @@ if __name__ == '__main__':
             while True:        
                 print
                 print 
-                print "0. Quit"
+                print "q. Quit"
                 print
                 print "1. tune K       %2.4f" % PI[0]
                 print "2. tune I       %2.4f" % PI[1]
@@ -123,7 +140,7 @@ if __name__ == '__main__':
                 sel = raw_input()
                 if len(sel) != 1:
                     continue
-                elif sel == "0":
+                elif sel == "q":
                     exit(0)
                 elif sel == "1":
                     PIIndex = 0
@@ -151,7 +168,6 @@ if __name__ == '__main__':
                                 
             print
             print     
-            cnt = 0 
             while True:
                 try:
                     # get update of ManualControlCommand 
@@ -165,12 +181,6 @@ if __name__ == '__main__':
                     
                     print "\r%-1.2f => %2.4f" % (txControl, value),
                     time.sleep(.1)
-                    cnt +=1 
-                    if cnt>=20:
-                        print "\a",
-                        time.sleep(.05)
-                        print "\a",
-                        cnt = 0
                     
                 except TimeoutException:
                     print "Timeout \a"
