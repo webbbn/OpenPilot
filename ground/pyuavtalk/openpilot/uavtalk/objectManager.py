@@ -40,11 +40,9 @@ class TimeoutException(Exception):
 
 class ObjManager(object):
     
-    def __init__(self, uavTalk, uavObjDefPath=None):
+    def __init__(self, uavTalk):
         self.objs = {}
         self.uavTalk = uavTalk
-        if uavObjDefPath != None:
-            self.importDefinitions(uavObjDefPath)
         uavTalk.setObjMan(self)
         
         
@@ -64,7 +62,12 @@ class ObjManager(object):
                 return obj
         return None
         
-    def importDefinitions(self, uavObjDefPath):
+    def importDefinitions(self, uavObjDefPath=None):
+        # when the uavObjDefPath is nor defined, assume it is installed together with this module
+        if uavObjDefPath == None:
+            currModPath = os.path.dirname(sys.modules[__name__].__file__)
+            uavObjDefPath = os.path.join(currModPath, "..", "uavobjects")
+        
         logging.info("Importing UAVObject definitions from %s" % uavObjDefPath)
         sys.path.append(uavObjDefPath)
         for fileName in os.listdir(uavObjDefPath):
