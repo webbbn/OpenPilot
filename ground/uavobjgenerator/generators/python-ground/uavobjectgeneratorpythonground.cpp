@@ -44,31 +44,6 @@ bool UAVObjectGeneratorPythonGround::generate(UAVObjectParser* parser,QString te
         process_object(info);
     }
 
-    // Generate setup.py
-    QString setup;
-    setup += "from distutils.core import setup \n\r";
-    setup += "import glob \n\r";
-    setup += "setup(name='OpenPilot UAV Objects', \n\r";
-    setup += "		      version='1.0', \n\r";
-    setup += "		      description='OpenPilot UAV Objects', \n\r";
-    setup += "		      url='http://www.openpilot.org', \n\r";
-    setup += "		      package_dir={'openpilot.uavobjects': '.'}, \n\r";
-    setup += "		      packages=['openpilot.uavobjects'], \n\r";
-    setup += "		     ) \n\r";
-
-    bool res = writeFileIfDiffrent( pythonOutputPath.absolutePath() + "/" + "setup.py", setup );
-	if (!res) {
-		cout << "Error: Could not write setup.py" << endl;
-		return false;
-	}
-
-	setup = "\n\r";
-	res = writeFileIfDiffrent( pythonOutputPath.absolutePath() + "/" + "__init__.py", setup );
-	if (!res) {
-		cout << "Error: Could not write __init__.py" << endl;
-		return false;
-	}
-
     return true; // if we come here everything should be fine
 }
 

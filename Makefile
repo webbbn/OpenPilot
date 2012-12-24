@@ -619,6 +619,26 @@ uavo-collections_clean:
 
 ##############################
 #
+# Python GCS related components
+#
+##############################
+
+.PHONY: pythongcs
+pythongcs:  uavobjects_pythonground
+	$(V1) mkdir -p $(BUILD_DIR)/ground/$@/openpilot/uavtalk/uavobjects
+	$(V1) cp -r $(UAVOBJ_OUT_DIR)/python-ground/* $(BUILD_DIR)/ground/$@/openpilot/uavtalk/uavobjects
+	$(V1) cp -r ground/pyuavtalk/openpilot/uavtalk/* $(BUILD_DIR)/ground/$@/openpilot/uavtalk
+	$(V1) touch $(BUILD_DIR)/ground/$@/openpilot/__init__.py
+	$(V1) touch $(BUILD_DIR)/ground/$@/openpilot/uavtalk/__init__.py
+	$(V1) touch $(BUILD_DIR)/ground/$@/openpilot/uavtalk/uavobjects/__init__.py
+
+.PHONY: pythongcs_clean
+pythongcs_clean:
+	$(V0) @echo " CLEAN      $@"
+	$(V1) [ ! -d "$(BUILD_DIR)/ground/pythongcs" ] || $(RM) -r "$(BUILD_DIR)/ground/pythongcs"
+
+##############################
+#
 # Unit Tests
 #
 ##############################

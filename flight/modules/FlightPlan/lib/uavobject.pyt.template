@@ -36,8 +36,12 @@ $(DATAFIELDS)
 
 # Object $(NAME) definition
 class $(NAME)(UAVObject):
-    # Object constants
-    OBJID = $(OBJID)
+	# Object constants
+	OBJID        = $(OBJID)
+	NAME         = "$(NAME)"
+	METANAME     = "$(NAME)Meta"
+	ISSINGLEINST = $(ISSINGLEINST)
+	ISSETTINGS   = $(ISSETTINGS)
 
     # Constructor
     def __init__(self):

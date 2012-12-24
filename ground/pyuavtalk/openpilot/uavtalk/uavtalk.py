@@ -28,6 +28,7 @@
 import time
 import logging
 import threading
+import serial
         
 SYNC = 0x3C
 VERSION_MASK = 0xFC
@@ -85,16 +86,50 @@ class Crc(object):
         
     def read(self):
         return self.crc
-    
+
     def add(self, value):
         self.crc = Crc.crcTable[self.crc ^ (value & 0xff)]
         
     def addList(self, values):
         for v in values:
             self.add(v)
+
         
+class SerialRecThread(threading.Thread):
+    
+    def __init__(self, serial, consumer):
+        threading.Thread.__init__(self)
+        self.serial = serial
+        self.consumer = consumer
+        self.stop = False
         
-class UavTalkRecThread(threading.Thread):
+    def run(self):
+        self.stop = False
+        while not self.stop:
+            rx = self.serial.read(1)
+            if len(rx) > 0:
+                rx = ord(rx)
+                self.consumer.consumeByte(rx)
+
+    def stop(self):
+        self.stop = True
+
+        
+class HIDReceiver():
+    
+    def __init__(self, hidDev, consumer):
+        self.hidDev = hidDev
+        self.consumer = consumer
+
+    def callback(self, data):
+        for rx in data:
+            self.consumer.consumeByte(rx)
+
+    def stop(self):
+        self.hidDev.close()
+
+
+class UavTalkProcessor():
     STATE_SYNC = 0
     STATE_TYPE = 1 
     STATE_SIZE = 2
@@ -102,129 +137,155 @@ class UavTalkRecThread(threading.Thread):
     STATE_INSTID = 4
     STATE_DATA = 5
     STATE_CS = 6
-    
+
     def __init__(self, uavTalk):
-        threading.Thread.__init__(self)
         self.uavTalk = uavTalk
         self.rxState = self.STATE_SYNC
         self.rxCrc = Crc()
-        self.stop = False
-        
-    def run(self):
-        #self.uavTalk.serial.open()
-        self.stop = False
-        while not self.stop:
-            rx = self.uavTalk.serial.read(1)
-            if len(rx) > 0:
-                rx = ord(rx)
-#                if (rx == SYNC):
-#                    print
-#                print hex(rx),
-                self._consumeByte(rx)
-                
-    def _consumeByte(self, rx):
+
+    def consumeByte(self, rx):
         self.rxCrc.add(rx)        
-        
-        if self.rxState == UavTalkRecThread.STATE_SYNC:
+
+        if self.rxState == UavTalkProcessor.STATE_SYNC:
+
+            # Wait for the SYNC byte
             if rx == SYNC:
                 self.rxCrc.reset(rx)       
                 self.rxState += 1
-#            else:
-#                logging.warning("NoSync")
                 
-        elif self.rxState == UavTalkRecThread.STATE_TYPE:
+        elif self.rxState == UavTalkProcessor.STATE_TYPE:
             if (rx & VERSION_MASK != VERSION):
-                self.rxState == UavTalkRecThread.STATE_SYNC
+                self.rxState == UavTalkProcessor.STATE_SYNC
             else:
                 self.rxType = rx & TYPE_MASK
                 self.rxCount = 0
                 self.rxSize = 0
                 self.rxState += 1
                 
-        elif self.rxState == UavTalkRecThread.STATE_SIZE:
-            self.rxSize >>= 8
-            self.rxSize |= (rx<<8)
+        elif self.rxState == UavTalkProcessor.STATE_SIZE:
+            # All integers are little endian
+            self.rxSize += rx << (8 * self.rxCount)
             self.rxCount += 1
             
-            if self.rxCount == 2:    
-                # Received complete packet size, check for valid packet size
+            # Received complete packet size?
+            if self.rxCount == 2:
+
+                # Check for valid packet size
                 if (self.rxSize < MIN_HEADER_LENGTH) or (self.rxSize > MAX_HEADER_LENGTH + MAX_PAYLOAD_LENGTH):
                     logging.error("INVALID Packet Size")
-                    self.rxState = UavTalkRecThread.STATE_SYNC
-                else:
-                    self.rxCount = 0
-                    self.rxObjId = 0
-                    self.rxState += 1
+                    self.rxState = UavTalkProcessor.STATE_SYNC
+                    return False
+                self.rxCount = 0
+                self.rxObjId = 0
+                self.rxInstId = 0
+                self.rxState += 1
                     
-        elif self.rxState == UavTalkRecThread.STATE_OBJID:
-            self.rxObjId >>= 8
-            self.rxObjId |= (rx<<24)
+        elif self.rxState == UavTalkProcessor.STATE_OBJID:
+            # All integers are little endian
+            self.rxObjId += rx << (8 * self.rxCount)
             self.rxCount += 1
             
-            if self.rxCount == 4:    
-                # Received complete ObjID
+            # Have we eceived complete ObjID?
+            if self.rxCount == 4:
+
+                # Lookup the object
                 self.obj = self.uavTalk.objMan.getObj(self.rxObjId)
-                if self.obj != None:
-                    self.rxDataSize = self.obj.getSerialisedSize()
-                    
-                    if MIN_HEADER_LENGTH+self.obj.getSerialisedSize() != self.rxSize:
-                        logging.error("packet Size MISMATCH")
-                        self.rxState = UavTalkRecThread.STATE_SYNC
-                    else:
-                        self.rxCount = 0
-                        self.rxData = []
-                        if (self.rxDataSize > 0):
-                            self.rxState = UavTalkRecThread.STATE_DATA
-                        else:
-                            self.rxState = UavTalkRecThread.STATE_DATA+1
-                else:
-                    logging.warning("Rec UNKNOWN Obj %x", self.rxObjId)
+                if self.obj == None:
+                    logging.error("Rec UNKNOWN Obj %x" % (self.rxObjId))
                     self.rxState = self.STATE_SYNC
+                    return False
+
+                # Verify the size
+                self.rxDataSize = self.obj.getSerialisedSize()
+                singleInst = (self.obj.ISSINGLEINST == 1)
+                objLen = MIN_HEADER_LENGTH + self.obj.getSerialisedSize() + (0 if singleInst else 2)
+                if objLen != self.rxSize:
+                    logging.error("packet Size MISMATCH  (%d,%d)  Obj %x" % (objLen, self.rxSize, self.rxObjId))
+                    self.rxState = UavTalkProcessor.STATE_SYNC
+                    return False
+
+                self.rxCount = 0
+                self.rxData = []
+                if not singleInst:
+                    self.rxState = UavTalkProcessor.STATE_INSTID
+                elif (self.rxDataSize > 0):
+                    self.rxState = UavTalkProcessor.STATE_DATA
+                else:
+                    self.rxState = UavTalkProcessor.STATE_CS
                 
-        elif self.rxState == UavTalkRecThread.STATE_DATA:
+        elif self.rxState == UavTalkProcessor.STATE_INSTID:
+            # All integers are little endian
+            self.rxInstId += rx << (8 * self.rxCount)
+            self.rxCount += 1
+            
+            # Have we eceived complete InstID?
+            if self.rxCount == 2:
+                self.obj.instId = self.rxInstId
+                self.rxCount = 0
+                if (self.rxDataSize > 0):
+                    self.rxState = UavTalkProcessor.STATE_DATA
+                else:
+                    self.rxState = UavTalkProcessor.STATE_CS
+
+        elif self.rxState == UavTalkProcessor.STATE_DATA:
+
+            # Append the data
             self.rxData.append(rx)
             self.rxCount += 1
+
+            # Have we reached the end of the data?
             if self.rxCount == self.rxDataSize:
                 self.rxState += 1
-            #else:
-            #    logging.error("Obj %x INVALID SIZE", self.rxObjId)
                 
-        elif self.rxState == UavTalkRecThread.STATE_CS:
+        elif self.rxState == UavTalkProcessor.STATE_CS:
+
             # by now, the CS has been added to the CRC calc, so now the CRC calc should read 0
             if self.rxCrc.read() != 0:
-                logging.error("CRC ERROR")
-            else:
-                self.uavTalk._onRecevedPacket(self.obj, self.rxType, self.rxData)    
-                self.rxState = UavTalkRecThread.STATE_SYNC
+                logging.error("CRC ERROR  Obj %x" % (self.rxObjId))
+                self.rxState = UavTalkProcessor.STATE_SYNC
+                return False
+
+            self.uavTalk._onRecevedPacket(self.obj, self.rxType, self.rxData)    
+            self.rxState = UavTalkProcessor.STATE_SYNC
             
         else:
             logging.error("INVALID STATE")
-            self.rxState = UavTalkRecThread.STATE_SYNC
+            self.rxState = UavTalkProcessor.STATE_SYNC
+            return False
 
+        return True
 
 class UavTalk(object):
 
-    def __init__(self, serial):
-        self.serial = serial
+    def __init__(self, port):
+        if type(port) == serial.Serial:
+            self.serial = port
+            self.hid = None
+        else:
+            self.hid = port
+            self.serial = None
         self.objMan = None
         self.txLock = threading.Lock()
+        self.processor = UavTalkProcessor(self)
         
     def setObjMan(self, objMan):
         self.objMan = objMan
         
     def start(self):
-        self.recThread = UavTalkRecThread(self)
-        self.recThread.start()
+        if self.serial:
+            self.recThread = SerialRecThread(self.serial, self.processor)
+            self.recThread.start()
+        else:
+            self.hidRcvr = HIDReceiver(self.hid, self.processor)
+            self.hid.set_raw_data_handler(self.hidRcvr.callback)
         
     def stop(self):
-        self.recThread.stop = True;
-        self.recThread.join()
-        
+        if self.serial:
+            self.recThread.stop = True;
+            self.recThread.join()
+
     def _onRecevedPacket(self, obj, rxType, rxData): 
         logging.debug("REC Obj %20s type %x cnt %d", obj, rxType, obj.updateCnt+1)
-#                for i in rxData: print hex(i),
-#                print
-               
         if rxType == TYPE_OBJ_ACK:
             logging.debug("Sending ACK for Obj %s", obj)
             self.sendObjectAck(obj)
@@ -243,7 +304,13 @@ class UavTalk(object):
         else:
             type = TYPE_OBJ
         self._sendpacket(type, obj.objId, obj.serialize())
-                
+
+    def send(self, data):
+        if self.serial:
+            self.serial.write("".join(map(chr, data)))
+        else:
+            self.hid.send_output_report(data)
+
     def _sendpacket(self, type, objId, data=None):
         
         self.txLock.acquire()
@@ -261,13 +328,13 @@ class UavTalk(object):
         
         crc = Crc()
         crc.addList(header)
-        self.serial.write("".join(map(chr,header)))
+        self.send(header)
         
         if data != None:
             crc.addList(data)
-            self.serial.write("".join(map(chr,data)))
+            self.send(data)
         
-        self.serial.write(chr(crc.read()))
+        self.send([crc.read()])
         
         self.txLock.release()
         

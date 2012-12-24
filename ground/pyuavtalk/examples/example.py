@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 ##
 ##############################################################################
 #
@@ -31,15 +32,20 @@ import serial
 import traceback
 import sys
 
+# Tru to load the Windows HID interface
+try:
+    from pywinusb import hid
+except:
+    pass
+
 from openpilot.uavtalk.uavobject import *
 from openpilot.uavtalk.uavtalk import *
 from openpilot.uavtalk.objectManager import *
 from openpilot.uavtalk.connectionManager import *
     
-    
 def _hex02(value):
     return "%02X" % value
-    
+
 class UavtalkDemo():
     
     def __init__(self):
@@ -50,15 +56,33 @@ class UavtalkDemo():
         self.connMan = None
         
     def setup(self, port):
-        print "Opening Port \"%s\"" % port
-        if port[:3].upper() == "COM":
-            _port = int(port[3:])-1
+
+        # Search for an OpenPilot HID device if the user specified HID
+        if port == 'HID':
+
+            hdev = None
+            for dev in hid.find_all_hid_devices():
+                if dev.vendor_name == 'openpilot.org':
+                    hdev = dev
+                    break
+            if not hdev:
+                print "HID device not found"
+                raise IOError("HID device not found")
+            print "Opening:", hdev
+            hdev.open()
+            serPort = hdev
+
         else:
-            _port = port
-        serPort = serial.Serial(_port, 57600, timeout=.5)
-        if not serPort.isOpen():
-            raise IOError("Failed to open serial port")
-        
+
+            print "Opening Port \"%s\"" % port
+            if port[:3].upper() == "COM":
+                _port = int(port[3:])-1
+            else:
+                _port = port
+            serPort = serial.Serial(_port, 57600, timeout=.5)
+            if not serPort.isOpen():
+                raise IOError("Failed to open serial port")
+
         print "Creating UavTalk"
         self.uavTalk = UavTalk(serPort)
         
@@ -182,36 +206,18 @@ if __name__ == '__main__':
         sys.exit(2)
 
     # Log everything, and send it to stderr.
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.ERROR)
 
-    try:
-        demo = UavtalkDemo()
-        demo.setup(port)
+    demo = UavtalkDemo()
+    demo.setup(port)
 
-        if option == "o":        
-            demo.showAttitudeViaObserver()      # will not return
-        elif option == "w":        
-            demo.showAttitudeViaWait()          # will not return
-        if option == "g":        
-            demo.showAttitudeViaGet()           # will not return
-        if option == "s":        
-            demo.driveServo()                   # will not return
+    if option == "o":        
+        demo.showAttitudeViaObserver()      # will not return
+    elif option == "w":        
+        demo.showAttitudeViaWait()          # will not return
+    if option == "g":        
+        demo.showAttitudeViaGet()           # will not return
+    if option == "s":        
+        demo.driveServo()                   # will not return
             
-    except KeyboardInterrupt:
-        pass
-    except Exception,e:
-        print
-        print "An error occured: ", e
-        print
-        traceback.print_exc()
-    
-    print
-    
-    try:
-        demo.stop()
-    except Exception:
-        pass
-    
-    raw_input("Press ENTER, the application will close")
-
-
+    demo.stop()

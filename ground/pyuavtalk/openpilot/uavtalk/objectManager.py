@@ -30,9 +30,10 @@ import logging
 import sys
 import os
 import inspect
+import pkgutil
 
 from openpilot.uavtalk.uavobject import *
-
+import openpilot.uavtalk.uavobjects
 
 
 class TimeoutException(Exception): 
@@ -62,32 +63,23 @@ class ObjManager(object):
                 return obj
         return None
         
-    def importDefinitions(self, uavObjDefPath=None):
-        # when the uavObjDefPath is nor defined, assume it is installed together with this module
-        if uavObjDefPath == None:
-            currModPath = os.path.dirname(sys.modules[__name__].__file__)
-            uavObjDefPath = os.path.join(currModPath, "..", "uavobjects")
-        
-        logging.info("Importing UAVObject definitions from %s" % uavObjDefPath)
-        sys.path.append(uavObjDefPath)
-        for fileName in os.listdir(uavObjDefPath):
-            if fileName[-3:] == ".py":
-                logging.debug("Importing from file %s", fileName)
-                module = __import__(fileName.replace(".py",""))
-                for name in dir(module):
-                    klass = getattr(module, name)
-                    obj = getattr(module, name)
-                    if inspect.isclass(obj):
-                        if name != "UAVObject"  and name != "UAVMetaDataObject"  and name != "UAVDataObject"  and issubclass(klass, UAVObject):
-                            logging.debug("Importing class %s", name)
-                            obj = klass()
-                            obj.name = name
-                            setattr(self, name, obj)
-                            self.addObj(obj)
-                            metaObj = UAVMetaDataObject(obj.getMetaObjId())
-                            obj.metadata = metaObj
-                            metaObj.name = "Meta[%s]" % name
-                            self.addObj(metaObj)
+    def importDefinitions(self):
+        package = openpilot.uavtalk.uavobjects
+        prefix = package.__name__ + "."
+        for importer, modname, ispkg in pkgutil.iter_modules(package.__path__, prefix):
+            module = __import__(modname, fromlist="dummy")
+            for name, obj in inspect.getmembers(module):
+                klass = getattr(module, name)
+                if inspect.isclass(obj) and name != "UAVObject" and name != "UAVMetaDataObject" and name != "UAVDataObject" and issubclass(klass, UAVObject):
+                    logging.debug("Importing class %s", name)
+                    obj = klass()
+                    obj.name = name
+                    setattr(self, name, obj)
+                    self.addObj(obj)
+                    metaObj = UAVMetaDataObject(obj.getMetaObjId())
+                    obj.metadata = metaObj
+                    metaObj.name = "Meta[%s]" % name
+                    self.addObj(metaObj)
     
     def regObjectObserver(self, obj, observerObj, observerMethod):
         o = Observer(observerObj, observerMethod)

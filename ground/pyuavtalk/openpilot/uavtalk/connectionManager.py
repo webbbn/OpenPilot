@@ -41,13 +41,11 @@ class ConnectionManager(object):
         self.objMan = objMan
         self.connected = False
         
-        
-        
         self.ftsObj = self.objMan.FlightTelemetryStats
         self.gcsObj = self.objMan.GCSTelemetryStats
         
-        import flighttelemetrystats
-        self.statusFieldClss = flighttelemetrystats.StatusField
+        import openpilot.uavtalk.uavobjects.flighttelemetrystats as fts
+        self.statusFieldClss = fts.StatusField
         
         
     def connect(self):
