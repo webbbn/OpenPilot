@@ -32,6 +32,7 @@ import sys
 
 import objectManager
 import uavobject
+import uavtalk
 import time
 
 class ConnectionManager(object):
@@ -47,10 +48,16 @@ class ConnectionManager(object):
         import openpilot.uavtalk.uavobjects.flighttelemetrystats as fts
         self.statusFieldClss = fts.StatusField
         
-        
     def connect(self):
+        '''
+        The process for connecting is:
+        GCSTelemetryStats.Status == STATUS_DISCONNECTED -> STATUS_HANDSHAKEREQ
+        FlightTelemetryStats.Status == STATUS_DISCONNECTED -> STATUS_HANDSHAKEACK
+        GCSTelemetryStats.Status == STATUS_HANDSHAKEREQ -> STATUS_CONNECTED
+        FlightTelemetryStats.Status == STATUS_HANDSHAKEACK -> STATUS_CONNECTED
+        '''
         timeout = True
-        logging.debug("Connecting")
+        logging.info("Connecting")
         startTime = time.clock()
         while not self.connected:
             try:
@@ -70,9 +77,8 @@ class ConnectionManager(object):
                 self.connected = False
                 logging.warning("Connecting TO")
                 pass
-        logging.debug("Connected in %.1fs" % (time.clock()-startTime))   
-        
-            
+        logging.info("Connected in %.1fs" % (time.clock()-startTime))
+
     def _onFtsChange(self, args=None):
         connected = False
         logging.debug("FTS State=%d TxFail=%3d RxFail=%3d TxRetry=%3d" % \

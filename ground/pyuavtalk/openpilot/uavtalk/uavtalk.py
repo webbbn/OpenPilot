@@ -45,9 +45,10 @@ MAX_HEADER_LENGTH = 10 # sync(1), type (1), size(2), object ID (4), instance ID(
 MAX_PAYLOAD_LENGTH = 255
 CHECKSUM_LENGTH = 1
 MAX_PACKET_LENGTH = (MAX_HEADER_LENGTH + MAX_PAYLOAD_LENGTH + CHECKSUM_LENGTH)
-    
 
-        
+
+class ConnectionClosed(Exception):
+    pass
 
 class Crc(object):
     
@@ -120,10 +121,13 @@ class HIDReceiver():
     def __init__(self, hidDev, consumer):
         self.hidDev = hidDev
         self.consumer = consumer
+        self.rxLock = threading.Lock()
 
     def callback(self, data):
+        self.rxLock.acquire()
         for rx in data:
             self.consumer.consumeByte(rx)
+        self.rxLock.release()
 
     def stop(self):
         self.hidDev.close()
@@ -308,8 +312,10 @@ class UavTalk(object):
     def send(self, data):
         if self.serial:
             self.serial.write("".join(map(chr, data)))
-        else:
+        elif self.hid.is_opened():
             self.hid.send_output_report(data)
+        else:
+            raise ConnectionClosed()
 
     def _sendpacket(self, type, objId, data=None):
         

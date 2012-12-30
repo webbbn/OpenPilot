@@ -64,12 +64,14 @@ class ObjManager(object):
         return None
         
     def importDefinitions(self):
+        # Import all of the UAVObjects
         package = openpilot.uavtalk.uavobjects
         prefix = package.__name__ + "."
         for importer, modname, ispkg in pkgutil.iter_modules(package.__path__, prefix):
             module = __import__(modname, fromlist="dummy")
             for name, obj in inspect.getmembers(module):
                 klass = getattr(module, name)
+                # Is this a UAVObject class?
                 if inspect.isclass(obj) and name != "UAVObject" and name != "UAVMetaDataObject" and name != "UAVDataObject" and issubclass(klass, UAVObject):
                     logging.debug("Importing class %s", name)
                     obj = klass()
@@ -80,7 +82,7 @@ class ObjManager(object):
                     obj.metadata = metaObj
                     metaObj.name = "Meta[%s]" % name
                     self.addObj(metaObj)
-    
+
     def regObjectObserver(self, obj, observerObj, observerMethod):
         o = Observer(observerObj, observerMethod)
         obj.observers.append(o)
@@ -120,7 +122,6 @@ class ObjManager(object):
     def requestAllObjUpdate(self):
         for objId, obj in self.objs.items():
             if not obj.isMetaData():
-                #print "GetMeta %s" % obj
                 try:
                     logging.debug("Getting %s" % obj)
                     self.waitObjUpdate(obj, request=True, timeout=.1)
@@ -139,8 +140,6 @@ class ObjManager(object):
         for objId, obj in self.objs.items():
             if obj.isMetaData() and obj.updateCnt>0:
                 if obj.objId not in objsToExclude:
-                    #print "Disabling automatic updates for %s" % (obj)
-                    #print obj.telemetryUpdateMode.value
                     obj.telemetryUpdateMode.value = UAVMetaDataObject.UpdateMode.MANUAL
                     self.uavTalk.sendObject(obj)
                     

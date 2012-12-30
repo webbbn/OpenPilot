@@ -66,15 +66,15 @@ class UavtalkDemo():
                     hdev = dev
                     break
             if not hdev:
-                print "HID device not found"
+                lgging.error("HID device not found")
                 raise IOError("HID device not found")
-            print "Opening:", hdev
+            logging.info("Opening: %s" % (hdev))
             hdev.open()
             serPort = hdev
 
         else:
 
-            print "Opening Port \"%s\"" % port
+            logging.info("Opening Port \"%s\"" % port)
             if port[:3].upper() == "COM":
                 _port = int(port[3:])-1
             else:
@@ -83,33 +83,33 @@ class UavtalkDemo():
             if not serPort.isOpen():
                 raise IOError("Failed to open serial port")
 
-        print "Creating UavTalk"
+        logging.info("Creating UavTalk")
         self.uavTalk = UavTalk(serPort)
         
-        print "Starting ObjectManager"
+        logging.info("Starting ObjectManager")
         self.objMan = ObjManager(self.uavTalk)
         self.objMan.importDefinitions()
         
-        print "Starting UavTalk"
+        logging.info("Starting UavTalk")
         self.uavTalk.start()
         
-        print "Starting ConnectionManager"
+        logging.info("Starting ConnectionManager")
         self.connMan = ConnectionManager(self.uavTalk, self.objMan)
         
-        print "Connecting...",
+        logging.info("Connecting...",)
         self.connMan.connect()
-        print "Connected"
+        logging.info("Connected")
         
-        print "Getting all Data"
+        logging.info("Getting all Data")
         self.objMan.requestAllObjUpdate()
         
-        print "SN:",
+        logging.info("SN:",)
         sn = self.objMan.FirmwareIAPObj.CPUSerial.value
-        print "".join(map(_hex02, sn))
-        
+        logging.info("".join(map(_hex02, sn)))
+
     def stop(self):
         if self.uavTalk:
-            print "Stopping UavTalk"
+            logging.info("Stopping UavTalk")
             self.uavTalk.stop()
         
     def showAttitudeViaObserver(self):
@@ -206,18 +206,28 @@ if __name__ == '__main__':
         sys.exit(2)
 
     # Log everything, and send it to stderr.
-    logging.basicConfig(level=logging.ERROR)
+    logging.basicConfig(level=logging.DEBUG)
 
     demo = UavtalkDemo()
     demo.setup(port)
 
-    if option == "o":        
-        demo.showAttitudeViaObserver()      # will not return
-    elif option == "w":        
-        demo.showAttitudeViaWait()          # will not return
-    if option == "g":        
-        demo.showAttitudeViaGet()           # will not return
-    if option == "s":        
-        demo.driveServo()                   # will not return
+    try:
+
+        if option == "o":        
+            demo.showAttitudeViaObserver()      # will not return
+        elif option == "w":        
+            demo.showAttitudeViaWait()          # will not return
+        elif option == "g":        
+            demo.showAttitudeViaGet()           # will not return
+        elif option == "s":        
+            demo.driveServo()                   # will not return
             
+    except KeyboardInterrupt:
+        pass
+    except Exception,e:
+        print
+        print "An error occured: ", e
+        print
+        traceback.print_exc()
+
     demo.stop()
