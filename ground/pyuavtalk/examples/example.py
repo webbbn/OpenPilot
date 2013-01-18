@@ -66,7 +66,7 @@ class UavtalkDemo():
                     hdev = dev
                     break
             if not hdev:
-                lgging.error("HID device not found")
+                logging.error("HID device not found")
                 raise IOError("HID device not found")
             logging.info("Opening: %s" % (hdev))
             hdev.open()
@@ -206,7 +206,7 @@ if __name__ == '__main__':
         sys.exit(2)
 
     # Log everything, and send it to stderr.
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
 
     demo = UavtalkDemo()
     demo.setup(port)

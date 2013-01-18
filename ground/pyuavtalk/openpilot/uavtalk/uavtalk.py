@@ -29,7 +29,9 @@ import time
 import logging
 import threading
 import serial
-        
+
+import uavobject
+
 SYNC = 0x3C
 VERSION_MASK = 0xFC
 VERSION = 0x20
@@ -125,8 +127,13 @@ class HIDReceiver():
 
     def callback(self, data):
         self.rxLock.acquire()
-        for rx in data:
-            self.consumer.consumeByte(rx)
+        # The second byte of the message should be the data length
+        #logging.debug(" ".join(["%x" % (d) for d in data]))
+        if data[1] > (len(data) - 2):
+            logging.error("HID message length is incorrect (%d != %d)" % (data[1], len(data) - 2))
+        else:
+            for rx in data[2:data[1]+2]:
+                self.consumer.consumeByte(rx)
         self.rxLock.release()
 
     def stop(self):
@@ -158,6 +165,8 @@ class UavTalkProcessor():
                 self.rxState += 1
                 
         elif self.rxState == UavTalkProcessor.STATE_TYPE:
+
+            # Verify the version and extract the message type
             if (rx & VERSION_MASK != VERSION):
                 self.rxState == UavTalkProcessor.STATE_SYNC
             else:
@@ -167,6 +176,7 @@ class UavTalkProcessor():
                 self.rxState += 1
                 
         elif self.rxState == UavTalkProcessor.STATE_SIZE:
+
             # All integers are little endian
             self.rxSize += rx << (8 * self.rxCount)
             self.rxCount += 1
@@ -185,6 +195,7 @@ class UavTalkProcessor():
                 self.rxState += 1
                     
         elif self.rxState == UavTalkProcessor.STATE_OBJID:
+
             # All integers are little endian
             self.rxObjId += rx << (8 * self.rxCount)
             self.rxCount += 1
@@ -201,9 +212,12 @@ class UavTalkProcessor():
 
                 # Verify the size
                 self.rxDataSize = self.obj.getSerialisedSize()
-                singleInst = (self.obj.ISSINGLEINST == 1)
-                objLen = MIN_HEADER_LENGTH + self.obj.getSerialisedSize() + (0 if singleInst else 2)
-                if objLen != self.rxSize:
+                singleInst = True
+                objLen = MIN_HEADER_LENGTH + self.obj.getSerialisedSize()
+                if objLen == (self.rxSize - 2):
+                    singleInst = False
+                    objLen += 2
+                elif objLen != self.rxSize:
                     logging.error("packet Size MISMATCH  (%d,%d)  Obj %x" % (objLen, self.rxSize, self.rxObjId))
                     self.rxState = UavTalkProcessor.STATE_SYNC
                     return False
@@ -218,6 +232,7 @@ class UavTalkProcessor():
                     self.rxState = UavTalkProcessor.STATE_CS
                 
         elif self.rxState == UavTalkProcessor.STATE_INSTID:
+
             # All integers are little endian
             self.rxInstId += rx << (8 * self.rxCount)
             self.rxCount += 1
@@ -239,11 +254,12 @@ class UavTalkProcessor():
 
             # Have we reached the end of the data?
             if self.rxCount == self.rxDataSize:
-                self.rxState += 1
+                self.rxCount = 0
+                self.rxState = UavTalkProcessor.STATE_CS
                 
         elif self.rxState == UavTalkProcessor.STATE_CS:
 
-            # by now, the CS has been added to the CRC calc, so now the CRC calc should read 0
+            # By now, the CS has been added to the CRC calc, so now the CRC calc should read 0
             if self.rxCrc.read() != 0:
                 logging.error("CRC ERROR  Obj %x" % (self.rxObjId))
                 self.rxState = UavTalkProcessor.STATE_SYNC
@@ -313,7 +329,13 @@ class UavTalk(object):
         if self.serial:
             self.serial.write("".join(map(chr, data)))
         elif self.hid.is_opened():
-            self.hid.send_output_report(data)
+            report = self.hid.find_output_reports()[0]
+            key = report.keys()[0]
+            ary = bytearray(64)
+            ary[0] = 2
+            ary[1] = len(data)
+            for i, d in enumerate(data):
+                ary[i + 2] = d
         else:
             raise ConnectionClosed()
 
@@ -331,16 +353,15 @@ class UavTalk(object):
         for i in xrange(4,8): 
             header[i] = objId & 0xff
             objId >>= 8
-        
+
         crc = Crc()
         crc.addList(header)
-        self.send(header)
         
         if data != None:
             crc.addList(data)
-            self.send(data)
-        
-        self.send([crc.read()])
+            self.send(header + data + [crc.read()])
+        else:
+            self.send(header + [crc.read()])
         
         self.txLock.release()
         
