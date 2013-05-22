@@ -65,6 +65,10 @@ uint32_t pios_com_telem_usb_id;
 
 uint32_t pios_mpu6000_interface_id;
 
+uintptr_t pios_uavo_settings_fs_id;
+
+uintptr_t pios_user_fs_id = 0;
+
 /**
  * PIOS_Board_Init()
  * initializes all the core subsystems on this specific hardware
@@ -82,6 +86,12 @@ void PIOS_Board_Init(void)
     PIOS_Assert(led_cfg);
     PIOS_LED_Init(led_cfg);
 #endif /* PIOS_INCLUDE_LED */
+
+#ifdef PIOS_INCLUDE_FLASH_LOGFS_SETTINGS
+    uintptr_t flash_id;
+    PIOS_Flash_Internal_Init(&flash_id, &flash_internal_cfg);
+    PIOS_FLASHFS_Logfs_Init(&pios_uavo_settings_fs_id, &flashfs_internal_cfg, &pios_internal_flash_driver, flash_id);
+#endif /* PIOS_INCLUDE_FLASH_LOGFS_SETTINGS */
 
     /* Initialize UAVObject libraries */
     EventDispatcherInitialize();
