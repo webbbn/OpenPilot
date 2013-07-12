@@ -7,7 +7,7 @@
  * @{
  *
  * @file       pios_mpu000.c
- * @author     The OpenPilot Team, http://www.openpilot.org Copyright (C) 2012.
+ * @author     The OpenPilot Team, http://www.openpilot.org Copyright (C) 2012-2013.
  * @brief      MPU6000 6-axis gyro and accel chip
  * @see        The GNU Public License (GPL) Version 3
  *
@@ -29,13 +29,10 @@
  * 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
 
+/* Project Includes */
 #include "pios.h"
 
 #ifdef PIOS_INCLUDE_MPU6000
-
-#include "fifo_buffer.h"
-
-/* Global Variables */
 
 enum pios_mpu6000_dev_magic {
     PIOS_MPU6000_DEV_MAGIC = 0x9da9b3ed,
@@ -43,9 +40,9 @@ enum pios_mpu6000_dev_magic {
 
 #define PIOS_MPU6000_MAX_DOWNSAMPLE 2
 struct mpu6000_dev {
-    uint32_t     spi_id;
-    uint32_t     slave_num;
-    xQueueHandle queue;
+    uint32_t interface_id;
+    uint32_t slave_num;
+    xSemaphoreHandle data_ready_sema;
     const struct pios_mpu6000_cfg *cfg;
     enum pios_mpu6000_range gyro_range;
     enum pios_mpu6000_accel_range accel_range;
@@ -53,16 +50,21 @@ struct mpu6000_dev {
     enum pios_mpu6000_dev_magic   magic;
 };
 
-// ! Global structure for this device device
+/* Global Variables */
 static struct mpu6000_dev *dev;
 volatile bool mpu6000_configured = false;
+static uint32_t mpu6000_irq = 0;
 
-// ! Private functions
+/* Private functions */
 static struct mpu6000_dev *PIOS_MPU6000_alloc(void);
 static int32_t PIOS_MPU6000_Validate(struct mpu6000_dev *dev);
 static void PIOS_MPU6000_Config(struct pios_mpu6000_cfg const *cfg);
-static int32_t PIOS_MPU6000_SetReg(uint8_t address, uint8_t buffer);
-static int32_t PIOS_MPU6000_GetReg(uint8_t address);
+
+/* External interface fuctions */
+extern void PIOS_MPU6000_SetClockSpeed(uint32_t interface_id, SPIPrescalerTypeDef speed);
+extern int32_t PIOS_MPU6000_Read(uint32_t interface_id, uint8_t slave_num, uint8_t addr, uint8_t len, uint8_t *data);
+extern int32_t PIOS_MPU6000_GetReg(uint32_t interface_id, uint8_t slave_num, uint8_t reg);
+extern int32_t PIOS_MPU6000_SetReg(uint32_t interface_id, uint8_t slave_num, uint8_t reg, uint8_t data);
 
 #define GRAV 9.81f
 
@@ -80,11 +82,14 @@ static struct mpu6000_dev *PIOS_MPU6000_alloc(void)
 
     mpu6000_dev->magic = PIOS_MPU6000_DEV_MAGIC;
 
-    mpu6000_dev->queue = xQueueCreate(PIOS_MPU6000_MAX_DOWNSAMPLE, sizeof(struct pios_mpu6000_data));
-    if (mpu6000_dev->queue == NULL) {
+    mpu6000_dev->data_ready_sema = xSemaphoreCreateMutex();
+    if (mpu6000_dev->data_ready_sema == NULL) {
         vPortFree(mpu6000_dev);
         return NULL;
     }
+
+    mpu6000_dev->interface_id = 0;
+    mpu6000_dev->slave_num    = 0;
 
     return mpu6000_dev;
 }
@@ -101,7 +106,7 @@ static int32_t PIOS_MPU6000_Validate(struct mpu6000_dev *vdev)
     if (vdev->magic != PIOS_MPU6000_DEV_MAGIC) {
         return -2;
     }
-    if (vdev->spi_id == 0) {
+    if (vdev->interface_id == 0) {
         return -3;
     }
     return 0;
@@ -111,21 +116,21 @@ static int32_t PIOS_MPU6000_Validate(struct mpu6000_dev *vdev)
  * @brief Initialize the MPU6000 3-axis gyro sensor.
  * @return 0 for success, -1 for failure
  */
-int32_t PIOS_MPU6000_Init(uint32_t spi_id, uint32_t slave_num, const struct pios_mpu6000_cfg *cfg)
+int32_t PIOS_MPU6000_Init(uint32_t interface_id, uint32_t slave_num, const struct pios_mpu6000_cfg *cfg)
 {
     dev = PIOS_MPU6000_alloc();
     if (dev == NULL) {
         return -1;
     }
 
-    dev->spi_id    = spi_id;
-    dev->slave_num = slave_num;
+    dev->interface_id = interface_id;
+    dev->slave_num    = slave_num;
     dev->cfg = cfg;
 
     /* Configure the MPU6000 Sensor */
-    PIOS_SPI_SetClockSpeed(dev->spi_id, PIOS_SPI_PRESCALER_256);
+    PIOS_MPU6000_SetClockSpeed(dev->interface_id, PIOS_SPI_PRESCALER_256);
     PIOS_MPU6000_Config(cfg);
-    PIOS_SPI_SetClockSpeed(dev->spi_id, PIOS_SPI_PRESCALER_16);
+    PIOS_MPU6000_SetClockSpeed(dev->interface_id, PIOS_SPI_PRESCALER_16);
 
     /* Set up EXTI line */
     PIOS_EXTI_Init(cfg->exti_cfg);
@@ -143,13 +148,13 @@ static void PIOS_MPU6000_Config(struct pios_mpu6000_cfg const *cfg)
     PIOS_MPU6000_Test();
 
     // Reset chip
-    while (PIOS_MPU6000_SetReg(PIOS_MPU6000_PWR_MGMT_REG, PIOS_MPU6000_PWRMGMT_IMU_RST) != 0) {
+    while (PIOS_MPU6000_SetReg(dev->interface_id, dev->slave_num, PIOS_MPU6000_PWR_MGMT_REG, PIOS_MPU6000_PWRMGMT_IMU_RST) != 0) {
         ;
     }
     PIOS_DELAY_WaitmS(50);
 
     // Reset chip and fifo
-    while (PIOS_MPU6000_SetReg(PIOS_MPU6000_USER_CTRL_REG,
+    while (PIOS_MPU6000_SetReg(dev->interface_id, dev->slave_num, PIOS_MPU6000_USER_CTRL_REG,
                                PIOS_MPU6000_USERCTL_GYRO_RST |
                                PIOS_MPU6000_USERCTL_SIG_COND |
                                PIOS_MPU6000_USERCTL_FIFO_RST) != 0) {
@@ -157,7 +162,7 @@ static void PIOS_MPU6000_Config(struct pios_mpu6000_cfg const *cfg)
     }
 
     // Wait for reset to finish
-    while (PIOS_MPU6000_GetReg(PIOS_MPU6000_USER_CTRL_REG) &
+    while (PIOS_MPU6000_GetReg(dev->interface_id, dev->slave_num, PIOS_MPU6000_USER_CTRL_REG) &
            (PIOS_MPU6000_USERCTL_GYRO_RST |
             PIOS_MPU6000_USERCTL_SIG_COND |
             PIOS_MPU6000_USERCTL_FIFO_RST)) {
@@ -165,51 +170,51 @@ static void PIOS_MPU6000_Config(struct pios_mpu6000_cfg const *cfg)
     }
     PIOS_DELAY_WaitmS(10);
     // Power management configuration
-    while (PIOS_MPU6000_SetReg(PIOS_MPU6000_PWR_MGMT_REG, cfg->Pwr_mgmt_clk) != 0) {
+    while (PIOS_MPU6000_SetReg(dev->interface_id, dev->slave_num, PIOS_MPU6000_PWR_MGMT_REG, cfg->Pwr_mgmt_clk) != 0) {
         ;
     }
 
     // Interrupt configuration
-    while (PIOS_MPU6000_SetReg(PIOS_MPU6000_INT_CFG_REG, cfg->interrupt_cfg) != 0) {
+    while (PIOS_MPU6000_SetReg(dev->interface_id, dev->slave_num, PIOS_MPU6000_INT_CFG_REG, cfg->interrupt_cfg) != 0) {
         ;
     }
 
     // Interrupt configuration
-    while (PIOS_MPU6000_SetReg(PIOS_MPU6000_INT_EN_REG, cfg->interrupt_en) != 0) {
+    while (PIOS_MPU6000_SetReg(dev->interface_id, dev->slave_num, PIOS_MPU6000_INT_EN_REG, cfg->interrupt_en) != 0) {
         ;
     }
 
     // FIFO storage
 #if defined(PIOS_MPU6000_ACCEL)
-    while (PIOS_MPU6000_SetReg(PIOS_MPU6000_FIFO_EN_REG, cfg->Fifo_store | PIOS_MPU6000_ACCEL_OUT) != 0) {
+    while (PIOS_MPU6000_SetReg(dev->interface_id, dev->slave_num, PIOS_MPU6000_FIFO_EN_REG, cfg->Fifo_store | PIOS_MPU6000_ACCEL_OUT) != 0) {
         ;
     }
 #else
-    while (PIOS_MPU6000_SetReg(PIOS_MPU6000_FIFO_EN_REG, cfg->Fifo_store) != 0) {
+    while (PIOS_MPU6000_SetReg(dev->interface_id, dev->slave_num, PIOS_MPU6000_FIFO_EN_REG, cfg->Fifo_store) != 0) {
         ;
     }
 #endif
     PIOS_MPU6000_ConfigureRanges(cfg->gyro_range, cfg->accel_range, cfg->filter);
     // Interrupt configuration
-    while (PIOS_MPU6000_SetReg(PIOS_MPU6000_USER_CTRL_REG, cfg->User_ctl) != 0) {
+    while (PIOS_MPU6000_SetReg(dev->interface_id, dev->slave_num, PIOS_MPU6000_USER_CTRL_REG, cfg->User_ctl) != 0) {
         ;
     }
 
     // Interrupt configuration
-    while (PIOS_MPU6000_SetReg(PIOS_MPU6000_PWR_MGMT_REG, cfg->Pwr_mgmt_clk) != 0) {
+    while (PIOS_MPU6000_SetReg(dev->interface_id, dev->slave_num, PIOS_MPU6000_PWR_MGMT_REG, cfg->Pwr_mgmt_clk) != 0) {
         ;
     }
 
     // Interrupt configuration
-    while (PIOS_MPU6000_SetReg(PIOS_MPU6000_INT_CFG_REG, cfg->interrupt_cfg) != 0) {
+    while (PIOS_MPU6000_SetReg(dev->interface_id, dev->slave_num, PIOS_MPU6000_INT_CFG_REG, cfg->interrupt_cfg) != 0) {
         ;
     }
 
     // Interrupt configuration
-    while (PIOS_MPU6000_SetReg(PIOS_MPU6000_INT_EN_REG, cfg->interrupt_en) != 0) {
+    while (PIOS_MPU6000_SetReg(dev->interface_id, dev->slave_num, PIOS_MPU6000_INT_EN_REG, cfg->interrupt_en) != 0) {
         ;
     }
-    if ((PIOS_MPU6000_GetReg(PIOS_MPU6000_INT_EN_REG)) != cfg->interrupt_en) {
+    if ((PIOS_MPU6000_GetReg(dev->interface_id, dev->slave_num, PIOS_MPU6000_INT_EN_REG)) != cfg->interrupt_en) {
         return;
     }
 
@@ -231,15 +236,15 @@ int32_t PIOS_MPU6000_ConfigureRanges(
     // TODO: check that changing the SPI clock speed is safe
     // to do here given that interrupts are enabled and the bus has
     // not been claimed/is not claimed during this call
-    PIOS_SPI_SetClockSpeed(dev->spi_id, PIOS_SPI_PRESCALER_256);
+    PIOS_MPU6000_SetClockSpeed(dev->interface_id, PIOS_SPI_PRESCALER_256);
 
     // update filter settings
-    while (PIOS_MPU6000_SetReg(PIOS_MPU6000_DLPF_CFG_REG, filterSetting) != 0) {
+    while (PIOS_MPU6000_SetReg(dev->interface_id, dev->slave_num, PIOS_MPU6000_DLPF_CFG_REG, filterSetting) != 0) {
         ;
     }
 
     // Sample rate divider, chosen upon digital filtering settings
-    while (PIOS_MPU6000_SetReg(PIOS_MPU6000_SMPLRT_DIV_REG,
+    while (PIOS_MPU6000_SetReg(dev->interface_id, dev->slave_num, PIOS_MPU6000_SMPLRT_DIV_REG,
                                filterSetting == PIOS_MPU6000_LOWPASS_256_HZ ?
                                dev->cfg->Smpl_rate_div_no_dlp : dev->cfg->Smpl_rate_div_dlp) != 0) {
         ;
@@ -248,159 +253,20 @@ int32_t PIOS_MPU6000_ConfigureRanges(
     dev->filter = filterSetting;
 
     // Gyro range
-    while (PIOS_MPU6000_SetReg(PIOS_MPU6000_GYRO_CFG_REG, gyroRange) != 0) {
+    while (PIOS_MPU6000_SetReg(dev->interface_id, dev->slave_num, PIOS_MPU6000_GYRO_CFG_REG, gyroRange) != 0) {
         ;
     }
 
     dev->gyro_range = gyroRange;
 #if defined(PIOS_MPU6000_ACCEL)
     // Set the accel range
-    while (PIOS_MPU6000_SetReg(PIOS_MPU6000_ACCEL_CFG_REG, accelRange) != 0) {
+    while (PIOS_MPU6000_SetReg(dev->interface_id, dev->slave_num, PIOS_MPU6000_ACCEL_CFG_REG, accelRange) != 0) {
         ;
     }
 
     dev->accel_range = accelRange;
 #endif
-    PIOS_SPI_SetClockSpeed(dev->spi_id, PIOS_SPI_PRESCALER_16);
-    return 0;
-}
-
-/**
- * @brief Claim the SPI bus for the accel communications and select this chip
- * @return 0 if successful, -1 for invalid device, -2 if unable to claim bus
- */
-static int32_t PIOS_MPU6000_ClaimBus()
-{
-    if (PIOS_MPU6000_Validate(dev) != 0) {
-        return -1;
-    }
-    if (PIOS_SPI_ClaimBus(dev->spi_id) != 0) {
-        return -2;
-    }
-    PIOS_SPI_RC_PinSet(dev->spi_id, dev->slave_num, 0);
-    return 0;
-}
-
-/**
- * @brief Claim the SPI bus for the accel communications and select this chip
- * @return 0 if successful, -1 for invalid device, -2 if unable to claim bus
- * @param woken[in,out] If non-NULL, will be set to true if woken was false and a higher priority
- *                      task has is now eligible to run, else unchanged
- */
-static int32_t PIOS_MPU6000_ClaimBusISR(bool *woken)
-{
-    if (PIOS_MPU6000_Validate(dev) != 0) {
-        return -1;
-    }
-    if (PIOS_SPI_ClaimBusISR(dev->spi_id, woken) != 0) {
-        return -2;
-    }
-    PIOS_SPI_RC_PinSet(dev->spi_id, dev->slave_num, 0);
-    return 0;
-}
-
-/**
- * @brief Release the SPI bus for the accel communications and end the transaction
- * @return 0 if successful
- */
-static int32_t PIOS_MPU6000_ReleaseBus()
-{
-    if (PIOS_MPU6000_Validate(dev) != 0) {
-        return -1;
-    }
-    PIOS_SPI_RC_PinSet(dev->spi_id, dev->slave_num, 1);
-    return PIOS_SPI_ReleaseBus(dev->spi_id);
-}
-
-/**
- * @brief Release the SPI bus for the accel communications and end the transaction
- * @return 0 if successful
- * @param woken[in,out] If non-NULL, will be set to true if woken was false and a higher priority
- *                      task has is now eligible to run, else unchanged
- */
-static int32_t PIOS_MPU6000_ReleaseBusISR(bool *woken)
-{
-    if (PIOS_MPU6000_Validate(dev) != 0) {
-        return -1;
-    }
-    PIOS_SPI_RC_PinSet(dev->spi_id, dev->slave_num, 1);
-    return PIOS_SPI_ReleaseBusISR(dev->spi_id, woken);
-}
-
-/**
- * @brief Read a register from MPU6000
- * @returns The register value or -1 if failure to get bus
- * @param reg[in] Register address to be read
- */
-static int32_t PIOS_MPU6000_GetReg(uint8_t reg)
-{
-    uint8_t data;
-
-    if (PIOS_MPU6000_ClaimBus() != 0) {
-        return -1;
-    }
-
-    PIOS_SPI_TransferByte(dev->spi_id, (0x80 | reg)); // request byte
-    data = PIOS_SPI_TransferByte(dev->spi_id, 0); // receive response
-
-    PIOS_MPU6000_ReleaseBus();
-    return data;
-}
-
-/**
- * @brief Writes one byte to the MPU6000
- * \param[in] reg Register address
- * \param[in] data Byte to write
- * \return 0 if operation was successful
- * \return -1 if unable to claim SPI bus
- * \return -2 if unable to claim i2c device
- */
-static int32_t PIOS_MPU6000_SetReg(uint8_t reg, uint8_t data)
-{
-    if (PIOS_MPU6000_ClaimBus() != 0) {
-        return -1;
-    }
-
-    if (PIOS_SPI_TransferByte(dev->spi_id, 0x7f & reg) != 0) {
-        PIOS_MPU6000_ReleaseBus();
-        return -2;
-    }
-
-    if (PIOS_SPI_TransferByte(dev->spi_id, data) != 0) {
-        PIOS_MPU6000_ReleaseBus();
-        return -3;
-    }
-
-    PIOS_MPU6000_ReleaseBus();
-
-    return 0;
-}
-
-/**
- * @brief Read current X, Z, Y values (in that order)
- * \param[out] int16_t array of size 3 to store X, Z, and Y magnetometer readings
- * \returns 0 if succesful
- */
-int32_t PIOS_MPU6000_ReadGyros(struct pios_mpu6000_data *data)
-{
-    // THIS FUNCTION IS DEPRECATED AND DOES NOT PERFORM A ROTATION
-    uint8_t buf[7] = { PIOS_MPU6000_GYRO_X_OUT_MSB | 0x80, 0, 0, 0, 0, 0, 0 };
-    uint8_t rec[7];
-
-    if (PIOS_MPU6000_ClaimBus() != 0) {
-        return -1;
-    }
-
-    if (PIOS_SPI_TransferBlock(dev->spi_id, &buf[0], &rec[0], sizeof(buf), NULL) < 0) {
-        return -2;
-    }
-
-    PIOS_MPU6000_ReleaseBus();
-
-    data->gyro_x = rec[1] << 8 | rec[2];
-    data->gyro_y = rec[3] << 8 | rec[4];
-    data->gyro_z = rec[5] << 8 | rec[6];
-
+    PIOS_MPU6000_SetClockSpeed(dev->interface_id, PIOS_SPI_PRESCALER_16);
     return 0;
 }
 
@@ -410,7 +276,7 @@ int32_t PIOS_MPU6000_ReadGyros(struct pios_mpu6000_data *data)
  */
 int32_t PIOS_MPU6000_ReadID()
 {
-    int32_t mpu6000_id = PIOS_MPU6000_GetReg(PIOS_MPU6000_WHOAMI);
+    int32_t mpu6000_id = PIOS_MPU6000_GetReg(dev->interface_id, dev->slave_num, PIOS_MPU6000_WHOAMI);
 
     if (mpu6000_id < 0) {
         return -1;
@@ -419,16 +285,16 @@ int32_t PIOS_MPU6000_ReadID()
 }
 
 /**
- * \brief Reads the queue handle
- * \return Handle to the queue or null if invalid device
+ * \brief Returns the data ready semaphore
+ * \return Handle to the semaphore or null if invalid device
  */
-xQueueHandle PIOS_MPU6000_GetQueue()
+xSemaphoreHandle PIOS_MPU6000_GetSemaphore()
 {
     if (PIOS_MPU6000_Validate(dev) != 0) {
-        return (xQueueHandle)NULL;
+        return (xSemaphoreHandle)NULL;
     }
 
-    return dev->queue;
+    return dev->data_ready_sema;
 }
 
 
@@ -490,95 +356,77 @@ int32_t PIOS_MPU6000_Test(void)
 }
 
 /**
- * @brief Obtains the number of bytes in the FIFO. Call from ISR only.
+ * @brief Obtains the number of bytes in the FIFO.
  * @return the number of bytes in the FIFO
- * @param woken[in,out] If non-NULL, will be set to true if woken was false and a higher priority
- *                      task has is now eligible to run, else unchanged
  */
-static int32_t PIOS_MPU6000_FifoDepthISR(bool *woken)
+static uint16_t PIOS_MPU6000_FifoDepth()
 {
-    uint8_t mpu6000_send_buf[3] = { PIOS_MPU6000_FIFO_CNT_MSB | 0x80, 0, 0 };
-    uint8_t mpu6000_rec_buf[3];
+    uint8_t buf[2] = { 0, 0 };
+    uint8_t len    = PIOS_MPU6000_Read(dev->interface_id, dev->slave_num, PIOS_MPU6000_FIFO_CNT_MSB, 2, buf);
 
-    if (PIOS_MPU6000_ClaimBusISR(woken) != 0) {
-        return -1;
+    if (len < 2) {
+        return 0;
     }
-
-    if (PIOS_SPI_TransferBlock(dev->spi_id, &mpu6000_send_buf[0], &mpu6000_rec_buf[0], sizeof(mpu6000_send_buf), NULL) < 0) {
-        PIOS_MPU6000_ReleaseBusISR(woken);
-        return -1;
-    }
-
-    PIOS_MPU6000_ReleaseBusISR(woken);
-
-    return (mpu6000_rec_buf[1] << 8) | mpu6000_rec_buf[2];
+    return (buf[0] << 8) | buf[1];
 }
 
 /**
- * @brief EXTI IRQ Handler.  Read all the data from onboard buffer
- * @return a boolean to the EXTI IRQ Handler wrapper indicating if a
- *         higher priority task is now eligible to run
+ * @brief Get the status code.
+ * \return the status code if successful
+ * \return negative value if failed
  */
-uint32_t mpu6000_irq = 0;
-int32_t mpu6000_count;
-uint32_t mpu6000_fifo_backup    = 0;
-
-uint8_t mpu6000_last_read_count = 0;
-uint32_t mpu6000_fails = 0;
-
-uint32_t mpu6000_interval_us;
-uint32_t mpu6000_time_us;
-uint32_t mpu6000_transfer_size;
-
-bool PIOS_MPU6000_IRQHandler(void)
+static uint8_t PIOS_MPU6000_GetStatus(void)
 {
-    bool woken = false;
-    static uint32_t timeval;
+    int32_t reg;
 
-    mpu6000_interval_us = PIOS_DELAY_DiffuS(timeval);
-    timeval = PIOS_DELAY_GetRaw();
-
-    if (!mpu6000_configured) {
-        return false;
+    while ((reg = PIOS_MPU6000_GetReg(dev->interface_id, dev->slave_num, PIOS_MPU6000_INT_STATUS_REG)) < 0) {
+        ;
     }
+    return reg;
+}
 
-    mpu6000_count = PIOS_MPU6000_FifoDepthISR(&woken);
-    if (mpu6000_count < (int32_t)sizeof(struct pios_mpu6000_data)) {
-        return woken;
-    }
+/**
+ * @brief Determines if the FIFO has overflowed
+ * \return true if an overflow has occurred.
+ */
+static bool PIOS_MPU6000_Overflowed()
+{
+    uint8_t status = PIOS_MPU6000_GetStatus();
 
-    if (PIOS_MPU6000_ClaimBusISR(&woken) != 0) {
-        return woken;
-    }
+    return status & PIOS_MPU6000_INT_STATUS_OVERFLOW;
+}
 
-    static uint8_t mpu6000_send_buf[1 + sizeof(struct pios_mpu6000_data)] = { PIOS_MPU6000_FIFO_REG | 0x80, 0, 0, 0, 0, 0, 0, 0, 0 };
-    static uint8_t mpu6000_rec_buf[1 + sizeof(struct pios_mpu6000_data)];
+/**
+ * @brief Resets the Fifo (usually used after an overflow).
+ */
+static void PIOS_MPU6000_FifoReset()
+{
+    uint8_t reg = PIOS_MPU6000_GetReg(dev->interface_id, dev->slave_num, PIOS_MPU6000_USER_CTRL_REG);
 
-    if (PIOS_SPI_TransferBlock(dev->spi_id, &mpu6000_send_buf[0], &mpu6000_rec_buf[0], sizeof(mpu6000_send_buf), NULL) < 0) {
-        PIOS_MPU6000_ReleaseBusISR(&woken);
-        mpu6000_fails++;
-        return woken;
-    }
+    PIOS_MPU6000_SetReg(dev->interface_id, dev->slave_num, PIOS_MPU6000_USER_CTRL_REG, reg | PIOS_MPU6000_USERCTL_FIFO_RST);
+}
 
-    PIOS_MPU6000_ReleaseBusISR(&woken);
-
-    static struct pios_mpu6000_data data;
-
-    // In the case where extras samples backed up grabbed an extra
-    if (mpu6000_count >= (int32_t)(sizeof(data) * 2)) {
-        mpu6000_fifo_backup++;
-        if (PIOS_MPU6000_ClaimBusISR(&woken) != 0) {
-            return woken;
-        }
-
-        if (PIOS_SPI_TransferBlock(dev->spi_id, &mpu6000_send_buf[0], &mpu6000_rec_buf[0], sizeof(mpu6000_send_buf), NULL) < 0) {
-            PIOS_MPU6000_ReleaseBusISR(&woken);
-            mpu6000_fails++;
-            return woken;
-        }
-
-        PIOS_MPU6000_ReleaseBusISR(&woken);
-    }
+/**
+ * @brief Read the sensor values out of the data buffer and rotate appropriately.
+ * \param[in] buf The input buffer
+ * \param[out] data The scaled and rotated values.
+ */
+static void PIOS_MPU6000_Rotate(struct pios_mpu6000_data *data, const uint8_t *buf)
+{
+    uint8_t accel_y_msb = buf[0];
+    uint8_t accel_y_lsb = buf[1];
+    uint8_t accel_x_msb = buf[2];
+    uint8_t accel_x_lsb = buf[3];
+    uint8_t accel_z_msb = buf[4];
+    uint8_t accel_z_lsb = buf[5];
+    uint8_t temp_msb    = buf[6];
+    uint8_t temp_lsb    = buf[7];
+    uint8_t gyro_y_msb  = buf[8];
+    uint8_t gyro_y_lsb  = buf[9];
+    uint8_t gyro_x_msb  = buf[10];
+    uint8_t gyro_x_lsb  = buf[11];
+    uint8_t gyro_z_msb  = buf[12];
+    uint8_t gyro_z_lsb  = buf[13];
 
     // Rotate the sensor to OP convention.  The datasheet defines X as towards the right
     // and Y as forward.  OP convention transposes this.  Also the Z is defined negatively
@@ -587,67 +435,118 @@ bool PIOS_MPU6000_IRQHandler(void)
     // Currently we only support rotations on top so switch X/Y accordingly
     switch (dev->cfg->orientation) {
     case PIOS_MPU6000_TOP_0DEG:
-        data.accel_y = mpu6000_rec_buf[1] << 8 | mpu6000_rec_buf[2]; // chip X
-        data.accel_x = mpu6000_rec_buf[3] << 8 | mpu6000_rec_buf[4]; // chip Y
-        data.gyro_y  = mpu6000_rec_buf[9] << 8 | mpu6000_rec_buf[10]; // chip X
-        data.gyro_x  = mpu6000_rec_buf[11] << 8 | mpu6000_rec_buf[12]; // chip Y
+        data->accel_y = accel_y_msb << 8 | accel_y_lsb; // chip X
+        data->accel_x = accel_x_msb << 8 | accel_x_lsb; // chip Y
+        data->gyro_y  = gyro_y_msb << 8 | gyro_y_lsb; // chip X
+        data->gyro_x  = gyro_x_msb << 8 | gyro_x_lsb; // chip Y
         break;
     case PIOS_MPU6000_TOP_90DEG:
         // -1 to bring it back to -32768 +32767 range
-        data.accel_y = -1 - (mpu6000_rec_buf[3] << 8 | mpu6000_rec_buf[4]); // chip Y
-        data.accel_x = mpu6000_rec_buf[1] << 8 | mpu6000_rec_buf[2]; // chip X
-        data.gyro_y  = -1 - (mpu6000_rec_buf[11] << 8 | mpu6000_rec_buf[12]); // chip Y
-        data.gyro_x  = mpu6000_rec_buf[9] << 8 | mpu6000_rec_buf[10]; // chip X
+        data->accel_y = -1 - (accel_x_msb << 8 | accel_x_lsb); // chip Y
+        data->accel_x = accel_y_msb << 8 | accel_y_lsb; // chip X
+        data->gyro_y  = -1 - (gyro_x_msb << 8 | gyro_x_lsb); // chip Y
+        data->gyro_x  = gyro_y_msb << 8 | gyro_y_lsb; // chip X
         break;
     case PIOS_MPU6000_TOP_180DEG:
-        data.accel_y = -1 - (mpu6000_rec_buf[1] << 8 | mpu6000_rec_buf[2]); // chip X
-        data.accel_x = -1 - (mpu6000_rec_buf[3] << 8 | mpu6000_rec_buf[4]); // chip Y
-        data.gyro_y  = -1 - (mpu6000_rec_buf[9] << 8 | mpu6000_rec_buf[10]); // chip X
-        data.gyro_x  = -1 - (mpu6000_rec_buf[11] << 8 | mpu6000_rec_buf[12]); // chip Y
+        data->accel_y = -1 - (accel_y_msb << 8 | accel_y_lsb); // chip X
+        data->accel_x = -1 - (accel_x_msb << 8 | accel_x_lsb); // chip Y
+        data->gyro_y  = -1 - (gyro_y_msb << 8 | gyro_y_lsb); // chip X
+        data->gyro_x  = -1 - (gyro_x_msb << 8 | gyro_x_lsb); // chip Y
         break;
     case PIOS_MPU6000_TOP_270DEG:
-        data.accel_y = mpu6000_rec_buf[3] << 8 | mpu6000_rec_buf[4]; // chip Y
-        data.accel_x = -1 - (mpu6000_rec_buf[1] << 8 | mpu6000_rec_buf[2]); // chip X
-        data.gyro_y  = mpu6000_rec_buf[11] << 8 | mpu6000_rec_buf[12]; // chip Y
-        data.gyro_x  = -1 - (mpu6000_rec_buf[9] << 8 | mpu6000_rec_buf[10]); // chip X
+        data->accel_y = accel_x_msb << 8 | accel_x_lsb; // chip Y
+        data->accel_x = -1 - (accel_y_msb << 8 | accel_y_lsb); // chip X
+        data->gyro_y  = gyro_x_msb << 8 | gyro_x_lsb; // chip Y
+        data->gyro_x  = -1 - (gyro_y_msb << 8 | gyro_y_lsb); // chip X
         break;
     }
-    data.gyro_z      = -1 - (mpu6000_rec_buf[13] << 8 | mpu6000_rec_buf[14]);
-    data.accel_z     = -1 - (mpu6000_rec_buf[5] << 8 | mpu6000_rec_buf[6]);
-    data.temperature = mpu6000_rec_buf[7] << 8 | mpu6000_rec_buf[8];
+    data->gyro_z      = -1 - (gyro_z_msb << 8 | gyro_z_lsb);
+    data->accel_z     = -1 - (accel_z_msb << 8 | accel_z_lsb);
+    data->temperature = temp_msb << 8 | temp_lsb;
 #else /* if defined(PIOS_MPU6000_ACCEL) */
-    data.gyro_x      = mpu6000_rec_buf[3] << 8 | mpu6000_rec_buf[4];
-    data.gyro_y      = mpu6000_rec_buf[5] << 8 | mpu6000_rec_buf[6];
+    data->gyro_x      = accel_x_msb << 8 | accel_x_lsb;
+    data->gyro_y      = accel_z_msb << 8 | accel_z_lsb;
     switch (dev->cfg->orientation) {
     case PIOS_MPU6000_TOP_0DEG:
-        data.gyro_y = mpu6000_rec_buf[3] << 8 | mpu6000_rec_buf[4];
-        data.gyro_x = mpu6000_rec_buf[5] << 8 | mpu6000_rec_buf[6];
+        data->gyro_y = accel_x_msb << 8 | accel_x_lsb;
+        data->gyro_x = accel_z_msb << 8 | accel_z_lsb;
         break;
     case PIOS_MPU6000_TOP_90DEG:
-        data.gyro_y = -1 - (mpu6000_rec_buf[5] << 8 | mpu6000_rec_buf[6]); // chip Y
-        data.gyro_x = mpu6000_rec_buf[3] << 8 | mpu6000_rec_buf[4]; // chip X
+        data->gyro_y = -1 - (accel_z_msb << 8 | accel_z_lsb); // chip Y
+        data->gyro_x = accel_x_msb << 8 | accel_x_lsb; // chip X
         break;
     case PIOS_MPU6000_TOP_180DEG:
-        data.gyro_y = -1 - (mpu6000_rec_buf[3] << 8 | mpu6000_rec_buf[4]);
-        data.gyro_x = -1 - (mpu6000_rec_buf[5] << 8 | mpu6000_rec_buf[6]);
+        data->gyro_y = -1 - (accel_x_msb << 8 | accel_x_lsb);
+        data->gyro_x = -1 - (accel_z_msb << 8 | accel_z_lsb);
         break;
     case PIOS_MPU6000_TOP_270DEG:
-        data.gyro_y = mpu6000_rec_buf[5] << 8 | mpu6000_rec_buf[6]; // chip Y
-        data.gyro_x = -1 - (mpu6000_rec_buf[3] << 8 | mpu6000_rec_buf[4]); // chip X
+        data->gyro_y = accel_z_msb << 8 | accel_z_lsb; // chip Y
+        data->gyro_x = -1 - (accel_x_msb << 8 | accel_x_lsb); // chip X
         break;
     }
-    data.gyro_z = -1 - (mpu6000_rec_buf[7] << 8 | mpu6000_rec_buf[8]);
-    data.temperature = mpu6000_rec_buf[1] << 8 | mpu6000_rec_buf[2];
+    data->gyro_z = -1 - (temp_msb << 8 | temp_lsb);
+    data->temperature = accel_y_msb << 8 | accel_y_lsb;
 #endif /* if defined(PIOS_MPU6000_ACCEL) */
+}
 
-    signed portBASE_TYPE higherPriorityTaskWoken;
-    xQueueSendToBackFromISR(dev->queue, (void *)&data, &higherPriorityTaskWoken);
+/**
+ * @brief Read current accel, gyro, and temperature values.
+ * \param[out] data The scaled and rotated values.
+ * \returns true if succesful
+ */
+bool PIOS_MPU6000_ReadSensors(struct pios_mpu6000_data *data)
+{
+    uint8_t buf[14] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    uint8_t len     = PIOS_MPU6000_Read(dev->interface_id, dev->slave_num, PIOS_MPU6000_ACCEL_X_OUT_MSB, 14, buf);
 
+    if (len < 14) {
+        return false;
+    }
+    PIOS_MPU6000_Rotate(data, buf);
+    return true;
+}
+
+/**
+ * @brief Read current accel, gyro, and temperature values.
+ * \param[out] data The scaled and rotated values.
+ * \returns true if succesful
+ */
+bool PIOS_MPU6000_ReadFifo(struct pios_mpu6000_data *data)
+{
+    // Did the FIFO overflow?
+    if (PIOS_MPU6000_Overflowed()) {
+        PIOS_MPU6000_FifoReset();
+        return false;
+    }
+
+    // Ensure that there's enough data in the FIFO.
+    uint16_t depth = PIOS_MPU6000_FifoDepth();
+    if (depth < 14) {
+        return false;
+    }
+
+    // Read the data out of the FIFO.
+    uint8_t buf[14] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    uint8_t len     = PIOS_MPU6000_Read(dev->interface_id, dev->slave_num, PIOS_MPU6000_FIFO_REG, 14, buf);
+    if (len < 14) {
+        return false;
+    }
+    PIOS_MPU6000_Rotate(data, buf);
+    return true;
+}
+
+/**
+ * @brief EXTI IRQ Handler.  Read all the data from onboard buffer
+ * @return a boolean to the EXTI IRQ Handler wrapper indicating if a
+ *         higher priority task is now eligible to run
+ */
+bool PIOS_MPU6000_IRQHandler(void)
+{
     mpu6000_irq++;
 
-    mpu6000_time_us = PIOS_DELAY_DiffuS(timeval);
-
-    return woken || higherPriorityTaskWoken == pdTRUE;
+    portBASE_TYPE xHigherPriorityTaskWoken;
+    xSemaphoreGiveFromISR(dev->data_ready_sema, &xHigherPriorityTaskWoken);
+    return xHigherPriorityTaskWoken == pdTRUE;
 }
 
 #endif /* PIOS_INCLUDE_MPU6000 */

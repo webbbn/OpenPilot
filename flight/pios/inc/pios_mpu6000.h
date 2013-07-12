@@ -80,6 +80,7 @@
 
 /* Interrupt status */
 #define PIOS_MPU6000_INT_STATUS_FIFO_FULL 0x80
+#define PIOS_MPU6000_INT_STATUS_OVERFLOW  0x10
 #define PIOS_MPU6000_INT_STATUS_IMU_RDY   0X04
 #define PIOS_MPU6000_INT_STATUS_DATA_RDY  0X01
 
@@ -163,12 +164,13 @@ struct pios_mpu6000_cfg {
 /* Public Functions */
 extern int32_t PIOS_MPU6000_Init(uint32_t spi_id, uint32_t slave_num, const struct pios_mpu6000_cfg *new_cfg);
 extern int32_t PIOS_MPU6000_ConfigureRanges(enum pios_mpu6000_range gyroRange, enum pios_mpu6000_accel_range accelRange, enum pios_mpu6000_filter filterSetting);
-extern xQueueHandle PIOS_MPU6000_GetQueue();
-extern int32_t PIOS_MPU6000_ReadGyros(struct pios_mpu6000_data *buffer);
+extern xSemaphoreHandle PIOS_MPU6000_GetSemaphore();
 extern int32_t PIOS_MPU6000_ReadID();
 extern int32_t PIOS_MPU6000_Test();
 extern float PIOS_MPU6000_GetScale();
 extern float PIOS_MPU6000_GetAccelScale();
+extern bool PIOS_MPU6000_ReadSensors(struct pios_mpu6000_data *data);
+extern bool PIOS_MPU6000_ReadFifo(struct pios_mpu6000_data *data);
 extern bool PIOS_MPU6000_IRQHandler(void);
 
 #endif /* PIOS_MPU6000_H */

@@ -306,10 +306,16 @@ static void SensorsTask(__attribute__((unused)) void *parameters)
         case 0x03: // MPU6000 board
 #if defined(PIOS_INCLUDE_MPU6000)
             {
-                struct pios_mpu6000_data mpu6000_data;
-                xQueueHandle queue = PIOS_MPU6000_GetQueue();
+                // Wait for a signal that there is data ready in the FIFO.
+                xSemaphoreHandle semaphore = PIOS_MPU6000_GetSemaphore();
+                if (xSemaphoreTake(semaphore, SENSOR_PERIOD) == pdFALSE) {
+                    error = true;
+                    continue;
+                }
 
-                while (xQueueReceive(queue, (void *)&mpu6000_data, gyro_samples == 0 ? 10 : 0) != errQUEUE_EMPTY) {
+                // Read all available data out of the FIFO.
+                struct pios_mpu6000_data mpu6000_data;
+                while (PIOS_MPU6000_ReadFifo(&mpu6000_data)) {
                     gyro_accum[0]  += mpu6000_data.gyro_x;
                     gyro_accum[1]  += mpu6000_data.gyro_y;
                     gyro_accum[2]  += mpu6000_data.gyro_z;
@@ -318,12 +324,11 @@ static void SensorsTask(__attribute__((unused)) void *parameters)
                     accel_accum[1] += mpu6000_data.accel_y;
                     accel_accum[2] += mpu6000_data.accel_z;
 
-                    gyro_samples++;
-                    accel_samples++;
+                    ++gyro_samples;
+                    ++accel_samples;
                 }
 
                 if (gyro_samples == 0) {
-                    PIOS_MPU6000_ReadGyros(&mpu6000_data);
                     error = true;
                     continue;
                 }
