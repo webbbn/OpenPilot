@@ -63,8 +63,6 @@ uint32_t pios_com_debug_id;
 uint32_t pios_com_telem_rf_id;
 uint32_t pios_com_telem_usb_id;
 
-uint32_t pios_mpu6000_interface_id;
-
 uintptr_t pios_uavo_settings_fs_id;
 
 uintptr_t pios_user_fs_id = 0;
@@ -207,8 +205,17 @@ void PIOS_Board_Init(void)
     if (PIOS_I2C_Init(&pios_i2c_sensors_id, &pios_i2c_sensors_cfg)) {
         PIOS_Assert(0);
     }
-    pios_mpu6000_interface_id = pios_i2c_sensors_id;
 #endif /* PIOS_INCLUDE_I2C */
+
+#if defined(PIOS_INCLUDE_MPU6000)
+    /* Configure the MPU6000 */
+    extern const struct pios_mpu6000_cfg pios_mpu6000_cfg;
+    if (PIOS_MPU6000_Init(pios_i2c_sensors_id, 0x69, &pios_mpu6000_cfg) < 0) {
+        return;
+    }
+    PIOS_MPU6000_CONFIG_Configure();
+    PIOS_Assert(PIOS_MPU6000_Test() == 0);
+#endif /* PIOS_INCLUDE_MPU6000 */
 
     /* Enable the USB port */
     PIOS_LED_Off(PIOS_LED_USB_ENABLE);

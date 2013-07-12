@@ -201,7 +201,7 @@ static void AttitudeTask(__attribute__((unused)) void *parameters)
     const struct pios_board_info *bdinfo = &pios_board_info_blob;
 
     bool cc   = bdinfo->board_type == 0x04;
-    bool cc3d = cc && (bdinfo->board_rev == 0x02);
+    bool cc3d = cc && ((bdinfo->board_rev == 0x02) || (bdinfo->board_rev == 0x03));
 
     if (cc3d) {
 #if defined(PIOS_INCLUDE_MPU6000)

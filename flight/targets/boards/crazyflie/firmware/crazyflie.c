@@ -35,7 +35,15 @@
 #include <uavobjectsinit.h>
 #include <hwsettings.h>
 
+/* Local defines */
+#define INIT_TASK_PRIORITY (tskIDLE_PRIORITY + configMAX_PRIORITIES - 1) // max priority
+#define INIT_TASK_STACK    128
+
 /* Global Variables */
+static xTaskHandle initTaskHandle;
+
+/* Function Prototypes */
+static void initTask(void *parameters);
 
 /* Prototype of PIOS_Board_Init() function */
 extern void PIOS_Board_Init(void);
@@ -58,31 +66,13 @@ int main()
     /* Brings up System using CMSIS functions, enables the LEDs. */
     PIOS_SYS_Init();
 
-    /* swap the stack to use the IRQ stack */
-    Stack_Change();
+    /* We use a FreeRTOS task to bring up the system so we can always rely on FreeRTOS primitives */
+    int result = xTaskCreate(initTask, (const signed char *)"init",
+                             INIT_TASK_STACK, NULL, INIT_TASK_PRIORITY,
+                             &initTaskHandle);
+    PIOS_Assert(result == pdPASS);
 
-    /* Architecture dependant Hardware and
-     * core subsystem initialisation
-     * (see pios_board.c for your arch)
-     * */
-    PIOS_Board_Init();
-
-    /* Initialize modules */
-    MODULE_INITIALISE_ALL
-    /* Start the FreeRTOS scheduler, which should never return.
-     *
-     * NOTE: OpenPilot runs an operating system (FreeRTOS), which constantly calls
-     * (schedules) function files (modules). These functions never return from their
-     * while loops, which explains why each module has a while(1){} segment. Thus,
-     * the OpenPilot software actually starts at the vTaskStartScheduler() function,
-     * even though this is somewhat obscure.
-     *
-     * In addition, there are many main() functions in the OpenPilot firmware source tree
-     * This is because each main() refers to a separate hardware platform. Of course,
-     * C only allows one main(), so only the relevant main() function is compiled when
-     * making a specific firmware.
-     *
-     */
+    /* Start the FreeRTOS scheduler */
     vTaskStartScheduler();
 
     /* If all is well we will never reach here as the scheduler will now be running. */
@@ -96,6 +86,23 @@ int main()
     }
 
     return 0;
+}
+
+/**
+ * Initialisation task.
+ *
+ * Runs board and module initialisation, then terminates.
+ */
+void initTask(__attribute__((unused)) void *parameters)
+{
+    /* board driver init */
+    PIOS_Board_Init();
+
+    /* Initialize modules */
+    MODULE_INITIALISE_ALL;
+
+    /* terminate this task */
+    vTaskDelete(NULL);
 }
 
 // Clock configuration

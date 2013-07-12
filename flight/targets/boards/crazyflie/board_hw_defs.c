@@ -382,6 +382,8 @@ void PIOS_I2C_sensors_er_irq_handler(void)
 }
 
 #ifdef PIOS_INCLUDE_MPU6000
+#include "pios_mpu6000.h"
+#include "pios_mpu6000_config.h"
 static const struct pios_exti_cfg pios_exti_mpu6000_cfg __exti_config = {
     .vector = PIOS_MPU6000_IRQHandler,
     .line   = EXTI_Line14,
@@ -426,22 +428,6 @@ const struct pios_mpu6000_cfg pios_mpu6000_cfg = {
     .filter               = PIOS_MPU6000_LOWPASS_256_HZ,
     .orientation   = PIOS_MPU6000_TOP_180DEG
 };
-
-/*
-   static const struct pios_mpu6050_cfg pios_mpu6050_cfg = {
-    .exti_cfg = &pios_exti_mpu6050_cfg,
-    .Fifo_store = PIOS_MPU6050_FIFO_TEMP_OUT | PIOS_MPU6050_FIFO_GYRO_X_OUT | PIOS_MPU6050_FIFO_GYRO_Y_OUT | PIOS_MPU6050_FIFO_GYRO_Z_OUT,
-    // Clock at 8 khz, downsampled by 8 for 1khz
-    .Smpl_rate_div = 11,
-    .interrupt_cfg = PIOS_MPU6050_INT_CLR_ANYRD,
-    .interrupt_en = PIOS_MPU6050_INTEN_DATA_RDY,
-    .User_ctl = PIOS_MPU6050_USERCTL_FIFO_EN ,
-    .Pwr_mgmt_clk = PIOS_MPU6050_PWRMGMT_PLL_X_CLK,
-    .accel_range = PIOS_MPU6050_ACCEL_8G,
-    .gyro_range = PIOS_MPU6050_SCALE_500_DEG,
-    .filter = PIOS_MPU6050_LOWPASS_256_HZ,
-   };
- */
 
 #endif /* PIOS_INCLUDE_MPU6000 */
 
