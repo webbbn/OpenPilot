@@ -419,13 +419,13 @@ static int32_t updateSensorsCC3D(AccelStateData *accelStateData, GyroStateData *
 
     // Read all available data out of the FIFO.
     while (PIOS_MPU6000_ReadFifo(&mpu6000_data)) {
-        gyros[0]  += mpu6000_data.gyro_x * PIOS_MPU6000_GetScale();
-        gyros[1]  += mpu6000_data.gyro_y * PIOS_MPU6000_GetScale();
-        gyros[2]  += mpu6000_data.gyro_z * PIOS_MPU6000_GetScale();
+        gyros[0]  += mpu6000_data.gyro_x;
+        gyros[1]  += mpu6000_data.gyro_y;
+        gyros[2]  += mpu6000_data.gyro_z;
 
-        accels[0] += mpu6000_data.accel_x * PIOS_MPU6000_GetAccelScale();
-        accels[1] += mpu6000_data.accel_y * PIOS_MPU6000_GetAccelScale();
-        accels[2] += mpu6000_data.accel_z * PIOS_MPU6000_GetAccelScale();
+        accels[0] += mpu6000_data.accel_x;
+        accels[1] += mpu6000_data.accel_y;
+        accels[2] += mpu6000_data.accel_z;
 
         ++count;
     }
@@ -434,13 +434,16 @@ static int32_t updateSensorsCC3D(AccelStateData *accelStateData, GyroStateData *
         return -1; // Error, no data
     }
 
-    gyros[0]  /= count;
-    gyros[1]  /= count;
-    gyros[2]  /= count;
+    float gyro_scaling = PIOS_MPU6000_GetScale() / count;
+    float accel_scaling = PIOS_MPU6000_GetAccelScale() / count;
 
-    accels[0] /= count;
-    accels[1] /= count;
-    accels[2] /= count;
+    gyros[0]  *= gyro_scaling;
+    gyros[1]  *= gyro_scaling;
+    gyros[2]  *= gyro_scaling;
+
+    accels[0] *= accel_scaling;
+    accels[1] *= accel_scaling;
+    accels[2] *= accel_scaling;
 
     // gyrosData->temperature  = 35.0f + ((float)mpu6000_data.temperature + 512.0f) / 340.0f;
     // accelsData->temperature = 35.0f + ((float)mpu6000_data.temperature + 512.0f) / 340.0f;
