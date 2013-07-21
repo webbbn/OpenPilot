@@ -80,10 +80,16 @@ void PIOS_Board_Init(void)
     const struct pios_board_info *bdinfo = &pios_board_info_blob;
 
 #if defined(PIOS_INCLUDE_LED)
-    const struct pios_led_cfg *led_cfg   = PIOS_BOARD_HW_DEFS_GetLedCfg(bdinfo->board_rev);
+    const struct pios_gpio_cfg *led_cfg  = PIOS_BOARD_HW_DEFS_GetLedCfg(bdinfo->board_rev);
     PIOS_Assert(led_cfg);
     PIOS_LED_Init(led_cfg);
 #endif /* PIOS_INCLUDE_LED */
+
+#if defined(PIOS_INCLUDE_GPIO)
+    /* Configure the GPIO line */
+    uint32_t pios_gpios_id;
+    PIOS_GPIO_Init(&pios_gpios_id, &pios_gpios_cfg);
+#endif /* PIOS_INCLUDE_GPIO */
 
 #ifdef PIOS_INCLUDE_FLASH_LOGFS_SETTINGS
     uintptr_t flash_id;
@@ -134,6 +140,23 @@ void PIOS_Board_Init(void)
     PIOS_TIM_InitClock(&tim_2_cfg);
     PIOS_TIM_InitClock(&tim_3_cfg);
     PIOS_TIM_InitClock(&tim_4_cfg);
+
+#if defined(PIOS_INCLUDE_NRF24L01) && defined(PIOS_INCLUDE_SPI)
+    /* Set up the SPI interface to the nrf24l01 radio */
+    if (PIOS_SPI_Init(&pios_spi_nrf24l01_id, &pios_spi_nrf24l01_cfg)) {
+        PIOS_Assert(0);
+    }
+    /* Configure the MCO pin to output the system clock to the radio. */
+    GPIO_InitTypeDef GPIO_InitStructure;
+    GPIO_InitStructure.GPIO_Pin   = GPIO_Pin_8;
+    GPIO_InitStructure.GPIO_Mode  = GPIO_Mode_AF_PP;
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_Init(GPIOA, &GPIO_InitStructure);
+    RCC_MCOConfig(RCC_MCO_HSE);
+    if (PIOS_NRF24L01_Init(&pios_nrf24l01_dev, pios_spi_nrf24l01_id, &pios_nrf24l01_cfg)) {
+        PIOS_Assert(0);
+    }
+#endif /* PIOS_INCLUDE_SPI && PIOS_INCLUDE_NRF24L01 */
 
 #if defined(PIOS_INCLUDE_COM)
 #if defined(PIOS_INCLUDE_USB)
@@ -218,7 +241,7 @@ void PIOS_Board_Init(void)
 #endif /* PIOS_INCLUDE_MPU6000 */
 
     /* Enable the USB port */
-    PIOS_LED_Off(PIOS_LED_USB_ENABLE);
+    PIOS_GPIO_On(pios_gpios_id, PIOS_GPIO_USB_ENABLE);
 
     /* Make sure we have at least one telemetry link configured or else fail initialization */
     PIOS_Assert(pios_com_telem_rf_id || pios_com_telem_usb_id);

@@ -78,15 +78,18 @@
 // ------------------------
 #define TELEM_QUEUE_SIZE        20
 
+// -------------------------
+// GPIO
+// -------------------------
+#define PIOS_GPIO_USB_ENABLE    0
+
 // ------------------------
 // PIOS_LED
 // ------------------------
 #define PIOS_LED_HEARTBEAT      0
-#define PIOS_LED_USB            1
-#define PIOS_LED_USB_ENABLE     2
-#define USB_LED_ON              PIOS_LED_On(PIOS_LED_USB)
-#define USB_LED_OFF             PIOS_LED_Off(PIOS_LED_USB)
-#define USB_LED_TOGGLE          PIOS_LED_Toggle(PIOS_LED_USB)
+#define PIOS_LED_RADIO          1
+#define PIOS_LED_RX             PIOS_LED_RADIO
+#define PIOS_LED_TX             PIOS_LED_RADIO
 
 // -------------------------
 // System Settings
@@ -214,14 +217,6 @@ extern uint32_t pios_com_debug_id;
 // Timer controller settings
 // --------------------------
 #define PIOS_TIM_MAX_DEVS            3
-
-// -------------------------
-// GPIO
-// -------------------------
-#define PIOS_GPIO_PORTS              {}
-#define PIOS_GPIO_PINS               {}
-#define PIOS_GPIO_CLKS               {}
-#define PIOS_GPIO_NUM                0
 
 // -------------------------
 // USB

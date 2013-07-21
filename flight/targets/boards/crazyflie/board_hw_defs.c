@@ -28,33 +28,53 @@
 #if defined(PIOS_INCLUDE_LED)
 
 #include <pios_led_priv.h>
-static const struct pios_led pios_leds[] = {
-    [PIOS_LED_HEARTBEAT] =  {
-        .pin                =              {
+static const struct pios_gpio pios_leds[] = {
+    [PIOS_LED_HEARTBEAT] = {
+        .pin                =             {
             .gpio = GPIOB,
-            .init =              {
+            .init =             {
                 .GPIO_Pin   = GPIO_Pin_4,
                 .GPIO_Mode  = GPIO_Mode_Out_PP,
                 .GPIO_Speed = GPIO_Speed_50MHz,
             },
         },
         .remap              = GPIO_Remap_SWJ_JTAGDisable,
+        .active_low         = true
     },
-    [PIOS_LED_USB] =        {
-        .pin                =              {
+    [PIOS_LED_RADIO] =     {
+        .pin                =             {
             .gpio = GPIOB,
-            .init =              {
+            .init =             {
                 .GPIO_Pin   = GPIO_Pin_5,
                 .GPIO_Mode  = GPIO_Mode_Out_PP,
                 .GPIO_Speed = GPIO_Speed_50MHz,
             },
         },
         .remap              = GPIO_PartialRemap_TIM3,
+        .active_low         = true
     },
-    [PIOS_LED_USB_ENABLE] = {
-        .pin                =              {
+};
+
+static const struct pios_gpio_cfg pios_led_cfg = {
+    .gpios     = pios_leds,
+    .num_gpios = NELEMENTS(pios_leds),
+};
+
+const struct pios_gpio_cfg *PIOS_BOARD_HW_DEFS_GetLedCfg(__attribute__((unused)) uint32_t board_revision)
+{
+    return &pios_led_cfg;
+}
+
+#endif /* PIOS_INCLUDE_LED */
+
+#if defined(PIOS_INCLUDE_GPIO)
+
+#include <pios_gpio_priv.h>
+static const struct pios_gpio pios_gpios[] = {
+    [PIOS_GPIO_USB_ENABLE] = {
+        .pin                =               {
             .gpio = GPIOA,
-            .init =              {
+            .init =               {
                 .GPIO_Pin   = GPIO_Pin_0,
                 .GPIO_Mode  = GPIO_Mode_Out_PP,
                 .GPIO_Speed = GPIO_Speed_50MHz,
@@ -63,17 +83,177 @@ static const struct pios_led pios_leds[] = {
     },
 };
 
-static const struct pios_led_cfg pios_led_cfg = {
-    .leds     = pios_leds,
-    .num_leds = NELEMENTS(pios_leds),
+static const struct pios_gpio_cfg pios_gpios_cfg = {
+    .gpios     = pios_gpios,
+    .num_gpios = NELEMENTS(pios_gpios),
 };
 
-const struct pios_led_cfg *PIOS_BOARD_HW_DEFS_GetLedCfg(__attribute__((unused)) uint32_t board_revision)
+#endif /* PIOS_INCLUDE_LED */
+
+#if defined(PIOS_INCLUDE_SPI)
+
+#include <pios_spi_priv.h>
+
+
+/* NFR24L01 SPI Interface */
+void PIOS_SPI_nrf24l01_irq_handler(void);
+void DMA1_Channel4_IRQHandler() __attribute__((alias("PIOS_SPI_nrf24l01_irq_handler")));
+void DMA1_Channel5_IRQHandler() __attribute__((alias("PIOS_SPI_nrf24l01_irq_handler")));
+static const struct pios_spi_cfg pios_spi_nrf24l01_cfg = {
+    .regs = SPI2,
+    .init = {
+        .SPI_Mode              = SPI_Mode_Master,
+        .SPI_Direction         = SPI_Direction_2Lines_FullDuplex,
+        .SPI_DataSize          = SPI_DataSize_8b,
+        .SPI_NSS                                   = SPI_NSS_Soft,
+        .SPI_FirstBit          = SPI_FirstBit_MSB,
+        .SPI_CRCPolynomial     = 7,
+        .SPI_CPOL              = SPI_CPOL_Low,
+        .SPI_CPHA              = SPI_CPHA_1Edge,
+        .SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_8,
+    },
+    .use_crc = false,
+    .dma     = {
+        .ahb_clk = RCC_AHBPeriph_DMA1,
+
+        .irq     = {
+            .flags = (DMA1_FLAG_TC4 | DMA1_FLAG_TE4 | DMA1_FLAG_HT4 | DMA1_FLAG_GL4),
+            .init  = {
+                .NVIC_IRQChannel    = DMA1_Channel4_IRQn,
+                .NVIC_IRQChannelPreemptionPriority = PIOS_IRQ_PRIO_HIGH,
+                .NVIC_IRQChannelSubPriority        = 0,
+                .NVIC_IRQChannelCmd = ENABLE,
+            },
+        },
+
+        .rx                                        = {
+            .channel = DMA1_Channel4,
+            .init    = {
+                .DMA_PeripheralBaseAddr            = (uint32_t)&(SPI2->DR),
+                .DMA_DIR                           = DMA_DIR_PeripheralSRC,
+                .DMA_PeripheralInc      = DMA_PeripheralInc_Disable,
+                .DMA_MemoryInc          = DMA_MemoryInc_Enable,
+                .DMA_PeripheralDataSize = DMA_PeripheralDataSize_Byte,
+                .DMA_MemoryDataSize     = DMA_MemoryDataSize_Byte,
+                .DMA_Mode     = DMA_Mode_Normal,
+                .DMA_Priority = DMA_Priority_High,
+                .DMA_M2M                           = DMA_M2M_Disable,
+            },
+        },
+        .tx                                        = {
+            .channel = DMA1_Channel5,
+            .init    = {
+                .DMA_PeripheralBaseAddr            = (uint32_t)&(SPI2->DR),
+                .DMA_DIR                           = DMA_DIR_PeripheralDST,
+                .DMA_PeripheralInc      = DMA_PeripheralInc_Disable,
+                .DMA_MemoryInc          = DMA_MemoryInc_Enable,
+                .DMA_PeripheralDataSize = DMA_PeripheralDataSize_Byte,
+                .DMA_MemoryDataSize     = DMA_MemoryDataSize_Byte,
+                .DMA_Mode     = DMA_Mode_Normal,
+                .DMA_Priority = DMA_Priority_High,
+                .DMA_M2M                           = DMA_M2M_Disable,
+            },
+        },
+    },
+    .sclk                                          = {
+        .gpio = GPIOB,
+        .init = {
+            .GPIO_Pin   = GPIO_Pin_13,
+            .GPIO_Speed = GPIO_Speed_10MHz,
+            .GPIO_Mode  = GPIO_Mode_AF_PP,
+        },
+    },
+    .miso                                          = {
+        .gpio = GPIOB,
+        .init = {
+            .GPIO_Pin   = GPIO_Pin_14,
+            .GPIO_Speed = GPIO_Speed_10MHz,
+            .GPIO_Mode  = GPIO_Mode_IN_FLOATING,
+        },
+    },
+    .mosi                                          = {
+        .gpio = GPIOB,
+        .init = {
+            .GPIO_Pin   = GPIO_Pin_15,
+            .GPIO_Speed = GPIO_Speed_10MHz,
+            .GPIO_Mode  = GPIO_Mode_AF_PP,
+        },
+    },
+    .slave_count                                   = 1,
+    .ssel                                          = {
+        {
+            .gpio = GPIOB,
+            .init = {
+                .GPIO_Pin   = GPIO_Pin_12,
+                .GPIO_Speed = GPIO_Speed_50MHz,
+                .GPIO_Mode  = GPIO_Mode_Out_PP,
+            }
+        },
+    },
+};
+
+static uint32_t pios_spi_nrf24l01_id;
+void PIOS_SPI_nrf24l01_irq_handler(void)
 {
-    return &pios_led_cfg;
+    /* Call into the generic code to handle the IRQ for this specific device */
+    PIOS_SPI_IRQ_Handler(pios_spi_nrf24l01_id);
 }
 
-#endif /* PIOS_INCLUDE_LED */
+#endif /* PIOS_INCLUDE_SPI */
+
+#if defined(PIOS_INCLUDE_NRF24L01)
+#include <pios_nrf24l01_priv.h>
+
+static uint32_t pios_nrf24l01_dev;
+static bool PIOS_nrf24l01_irq_handler(void)
+{
+    /* Call into the generic code to handle the IRQ for this specific device */
+    return PIOS_NRF24L01_IRQHandler(pios_nrf24l01_dev);
+}
+static const struct pios_gpio pios_gpio_nrf24l01_ce_cfg = {
+    .pin                = {
+        .gpio = GPIOA,
+        .init = {
+            .GPIO_Pin   = GPIO_Pin_10,
+            .GPIO_Mode  = GPIO_Mode_Out_PP,
+            .GPIO_Speed = GPIO_Speed_50MHz,
+        },
+    },
+};
+
+static const struct pios_exti_cfg pios_exti_nrf24l01_cfg __exti_config = {
+    .vector = PIOS_nrf24l01_irq_handler,
+    .line   = EXTI_Line9,
+    .pin    = {
+        .gpio = GPIOA,
+        .init = {
+            .GPIO_Pin   = GPIO_Pin_9,
+            .GPIO_Speed = GPIO_Speed_50MHz,
+            .GPIO_Mode  = GPIO_Mode_IN_FLOATING,
+        },
+    },
+    .irq                                       = {
+        .init                                  = {
+            .NVIC_IRQChannel    = EXTI9_5_IRQn,
+            .NVIC_IRQChannelPreemptionPriority = PIOS_IRQ_PRIO_LOW,
+            .NVIC_IRQChannelSubPriority        = 0,
+            .NVIC_IRQChannelCmd = ENABLE,
+        },
+    },
+    .exti                                      = {
+        .init                                  = {
+            .EXTI_Line    = EXTI_Line9,
+            .EXTI_Mode    = EXTI_Mode_Interrupt,
+            .EXTI_Trigger = EXTI_Trigger_Falling,
+            .EXTI_LineCmd = ENABLE,
+        },
+    },
+};
+static const struct pios_nrf24l01_cfg pios_nrf24l01_cfg = {
+    .gpio_cfg = &pios_gpio_nrf24l01_ce_cfg,
+    .exti_cfg = &pios_exti_nrf24l01_cfg
+};
+#endif /* PIOS_INCLUDE_NRF24L01 */
 
 #if defined(PIOS_INCLUDE_FLASH)
 #include "pios_flashfs_logfs_priv.h"

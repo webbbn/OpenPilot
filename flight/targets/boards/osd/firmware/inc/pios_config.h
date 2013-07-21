@@ -121,6 +121,7 @@
 /* #define PIOS_INCLUDE_RFM22B_COM */
 /* #define PIOS_INCLUDE_PPM_OUT */
 /* #define PIOS_RFM22B_DEBUG_ON_TELEM */
+/* #define PIOS_INCLUDE_NRF24L01 */
 
 #define PIOS_INCLUDE_VIDEO
 /* #define PIOS_INCLUDE_WAVE */
