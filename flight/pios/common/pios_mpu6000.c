@@ -66,7 +66,13 @@ extern int32_t PIOS_MPU6000_Read(uint32_t interface_id, uint8_t slave_num, uint8
 extern int32_t PIOS_MPU6000_GetReg(uint32_t interface_id, uint8_t slave_num, uint8_t reg);
 extern int32_t PIOS_MPU6000_SetReg(uint32_t interface_id, uint8_t slave_num, uint8_t reg, uint8_t data);
 
-#define GRAV 9.81f
+#define GRAV                       9.81f
+
+#ifdef PIOS_MPU6000_ACCEL
+#define PIOS_MPU6000_SAMPLES_BYTES 14
+#else
+#define PIOS_MPU6000_SAMPLE_BYTES  8
+#endif
 
 /**
  * @brief Allocate a new device
@@ -413,6 +419,10 @@ static void PIOS_MPU6000_FifoReset()
  */
 static void PIOS_MPU6000_Rotate(struct pios_mpu6000_data *data, const uint8_t *buf)
 {
+    // Rotate the sensor to OP convention.  The datasheet defines X as towards the right
+    // and Y as forward.  OP convention transposes this.  Also the Z is defined negatively
+    // to our convention
+#if defined(PIOS_MPU6000_ACCEL)
     uint8_t accel_y_msb = buf[0];
     uint8_t accel_y_lsb = buf[1];
     uint8_t accel_x_msb = buf[2];
@@ -428,10 +438,6 @@ static void PIOS_MPU6000_Rotate(struct pios_mpu6000_data *data, const uint8_t *b
     uint8_t gyro_z_msb  = buf[12];
     uint8_t gyro_z_lsb  = buf[13];
 
-    // Rotate the sensor to OP convention.  The datasheet defines X as towards the right
-    // and Y as forward.  OP convention transposes this.  Also the Z is defined negatively
-    // to our convention
-#if defined(PIOS_MPU6000_ACCEL)
     // Currently we only support rotations on top so switch X/Y accordingly
     switch (dev->cfg->orientation) {
     case PIOS_MPU6000_TOP_0DEG:
@@ -464,8 +470,17 @@ static void PIOS_MPU6000_Rotate(struct pios_mpu6000_data *data, const uint8_t *b
     data->accel_z     = -1 - (accel_z_msb << 8 | accel_z_lsb);
     data->temperature = temp_msb << 8 | temp_lsb;
 #else /* if defined(PIOS_MPU6000_ACCEL) */
-    data->gyro_x      = accel_x_msb << 8 | accel_x_lsb;
-    data->gyro_y      = accel_z_msb << 8 | accel_z_lsb;
+    uint8_t temp_msb   = buf[0];
+    uint8_t temp_lsb   = buf[1];
+    uint8_t gyro_y_msb = buf[2];
+    uint8_t gyro_y_lsb = buf[3];
+    uint8_t gyro_x_msb = buf[4];
+    uint8_t gyro_x_lsb = buf[5];
+    uint8_t gyro_z_msb = buf[6];
+    uint8_t gyro_z_lsb = buf[7];
+
+    data->gyro_x = accel_x_msb << 8 | accel_x_lsb;
+    data->gyro_y = accel_z_msb << 8 | accel_z_lsb;
     switch (dev->cfg->orientation) {
     case PIOS_MPU6000_TOP_0DEG:
         data->gyro_y = accel_x_msb << 8 | accel_x_lsb;
@@ -496,10 +511,10 @@ static void PIOS_MPU6000_Rotate(struct pios_mpu6000_data *data, const uint8_t *b
  */
 bool PIOS_MPU6000_ReadSensors(struct pios_mpu6000_data *data)
 {
-    uint8_t buf[14] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-    uint8_t len     = PIOS_MPU6000_Read(dev->interface_id, dev->slave_num, PIOS_MPU6000_ACCEL_X_OUT_MSB, 14, buf);
+    uint8_t buf[PIOS_MPU6000_SAMPLES_BYTES];
+    uint8_t len = PIOS_MPU6000_Read(dev->interface_id, dev->slave_num, PIOS_MPU6000_ACCEL_X_OUT_MSB, PIOS_MPU6000_SAMPLES_BYTES, buf);
 
-    if (len < 14) {
+    if (len < PIOS_MPU6000_SAMPLES_BYTES) {
         return false;
     }
     PIOS_MPU6000_Rotate(data, buf);
@@ -521,14 +536,14 @@ bool PIOS_MPU6000_ReadFifo(struct pios_mpu6000_data *data)
 
     // Ensure that there's enough data in the FIFO.
     uint16_t depth = PIOS_MPU6000_FifoDepth();
-    if (depth < 14) {
+    if (depth < PIOS_MPU6000_SAMPLES_BYTES) {
         return false;
     }
 
     // Read the data out of the FIFO.
-    uint8_t buf[14] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-    uint8_t len     = PIOS_MPU6000_Read(dev->interface_id, dev->slave_num, PIOS_MPU6000_FIFO_REG, 14, buf);
-    if (len < 14) {
+    uint8_t buf[PIOS_MPU6000_SAMPLES_BYTES];
+    uint8_t len = PIOS_MPU6000_Read(dev->interface_id, dev->slave_num, PIOS_MPU6000_FIFO_REG, PIOS_MPU6000_SAMPLES_BYTES, buf);
+    if (len < PIOS_MPU6000_SAMPLES_BYTES) {
         return false;
     }
     PIOS_MPU6000_Rotate(data, buf);

@@ -434,7 +434,7 @@ static int32_t updateSensorsCC3D(AccelStateData *accelStateData, GyroStateData *
         return -1; // Error, no data
     }
 
-    float gyro_scaling = PIOS_MPU6000_GetScale() / count;
+    float gyro_scaling  = PIOS_MPU6000_GetScale() / count;
     float accel_scaling = PIOS_MPU6000_GetAccelScale() / count;
 
     gyros[0]  *= gyro_scaling;
