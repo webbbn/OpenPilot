@@ -60,7 +60,6 @@ int32_t PIOS_MPU6000_ReleaseBus(uint32_t interface_id, uint8_t slave_num, bool s
     if (speedup_bus) {
         PIOS_SPI_SetClockSpeed(interface_id, PIOS_SPI_PRESCALER_16);
     }
-    PIOS_SPI_SetClockSpeed(interface_id, PIOS_SPI_PRESCALER_16);
     return PIOS_SPI_ReleaseBus(interface_id);
 }
 
@@ -125,12 +124,12 @@ int32_t PIOS_MPU6000_SetReg(uint32_t interface_id, uint8_t slave_num, uint8_t re
     }
 
     if (PIOS_SPI_TransferByte(interface_id, 0x7f & reg) != 0) {
-        PIOS_MPU6000_ReleaseBus(interface_id, slave_num, false);
+        PIOS_MPU6000_ReleaseBus(interface_id, slave_num, true);
         return -2;
     }
 
     if (PIOS_SPI_TransferByte(interface_id, data) != 0) {
-        PIOS_MPU6000_ReleaseBus(interface_id, slave_num, false);
+        PIOS_MPU6000_ReleaseBus(interface_id, slave_num, true);
         return -3;
     }
 
