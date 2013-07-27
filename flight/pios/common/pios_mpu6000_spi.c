@@ -35,21 +35,16 @@
 #ifdef PIOS_INCLUDE_MPU6000_SPI
 
 /**
- * @brief Change the interface clock speed
- */
-void PIOS_MPU6000_SetClockSpeed(uint32_t interface_id, SPIPrescalerTypeDef speed)
-{
-    PIOS_SPI_SetClockSpeed(interface_id, speed);
-}
-
-/**
  * @brief Claim the SPI bus for the accel communications and select this chip
  * @return 0 if successful, -1 for invalid device, -2 if unable to claim bus
  */
-static int32_t PIOS_MPU6000_ClaimBus(uint32_t interface_id, uint32_t slave_num)
+int32_t PIOS_MPU6000_ClaimBus(uint32_t interface_id, uint32_t slave_num, bool slow_bus)
 {
     if (PIOS_SPI_ClaimBus(interface_id) != 0) {
         return -2;
+    }
+    if (slow_bus) {
+        PIOS_SPI_SetClockSpeed(interface_id, PIOS_SPI_PRESCALER_256);
     }
     PIOS_SPI_RC_PinSet(interface_id, slave_num, 0);
     return 0;
@@ -59,9 +54,13 @@ static int32_t PIOS_MPU6000_ClaimBus(uint32_t interface_id, uint32_t slave_num)
  * @brief Release the SPI bus for the accel communications and end the transaction
  * @return 0 if successful
  */
-static int32_t PIOS_MPU6000_ReleaseBus(uint32_t interface_id, uint8_t slave_num)
+int32_t PIOS_MPU6000_ReleaseBus(uint32_t interface_id, uint8_t slave_num, bool speedup_bus)
 {
     PIOS_SPI_RC_PinSet(interface_id, slave_num, 1);
+    if (speedup_bus) {
+        PIOS_SPI_SetClockSpeed(interface_id, PIOS_SPI_PRESCALER_16);
+    }
+    PIOS_SPI_SetClockSpeed(interface_id, PIOS_SPI_PRESCALER_16);
     return PIOS_SPI_ReleaseBus(interface_id);
 }
 
@@ -74,7 +73,7 @@ static int32_t PIOS_MPU6000_ReleaseBus(uint32_t interface_id, uint8_t slave_num)
  */
 int32_t PIOS_MPU6000_Read(uint32_t interface_id, uint8_t slave_num, uint8_t addr, uint8_t len, uint8_t *data)
 {
-    if (PIOS_MPU6000_ClaimBus(interface_id, slave_num) != 0) {
+    if (PIOS_MPU6000_ClaimBus(interface_id, slave_num, false) != 0) {
         return -1;
     }
 
@@ -82,12 +81,12 @@ int32_t PIOS_MPU6000_Read(uint32_t interface_id, uint8_t slave_num, uint8_t addr
     static uint8_t mpu6000_rec_buf[1 + sizeof(struct pios_mpu6000_data)];
     mpu6000_send_buf[0] = addr | 0x80;
     if (PIOS_SPI_TransferBlock(interface_id, mpu6000_send_buf, mpu6000_rec_buf, len + 1, NULL) < 0) {
-        PIOS_MPU6000_ReleaseBus(interface_id, slave_num);
+        PIOS_MPU6000_ReleaseBus(interface_id, slave_num, false);
         return -2;
     }
     memcpy(data, mpu6000_rec_buf + 1, len);
 
-    PIOS_MPU6000_ReleaseBus(interface_id, slave_num);
+    PIOS_MPU6000_ReleaseBus(interface_id, slave_num, false);
     return len;
 }
 
@@ -100,14 +99,14 @@ int32_t PIOS_MPU6000_GetReg(uint32_t interface_id, uint8_t slave_num, uint8_t re
 {
     uint8_t data;
 
-    if (PIOS_MPU6000_ClaimBus(interface_id, slave_num) != 0) {
+    if (PIOS_MPU6000_ClaimBus(interface_id, slave_num, false) != 0) {
         return -1;
     }
 
     PIOS_SPI_TransferByte(interface_id, (0x80 | reg)); // request byte
     data = PIOS_SPI_TransferByte(interface_id, 0); // receive response
 
-    PIOS_MPU6000_ReleaseBus(interface_id, slave_num);
+    PIOS_MPU6000_ReleaseBus(interface_id, slave_num, false);
     return data;
 }
 
@@ -121,21 +120,21 @@ int32_t PIOS_MPU6000_GetReg(uint32_t interface_id, uint8_t slave_num, uint8_t re
  */
 int32_t PIOS_MPU6000_SetReg(uint32_t interface_id, uint8_t slave_num, uint8_t reg, uint8_t data)
 {
-    if (PIOS_MPU6000_ClaimBus(interface_id, slave_num) != 0) {
+    if (PIOS_MPU6000_ClaimBus(interface_id, slave_num, true) != 0) {
         return -1;
     }
 
     if (PIOS_SPI_TransferByte(interface_id, 0x7f & reg) != 0) {
-        PIOS_MPU6000_ReleaseBus(interface_id, slave_num);
+        PIOS_MPU6000_ReleaseBus(interface_id, slave_num, false);
         return -2;
     }
 
     if (PIOS_SPI_TransferByte(interface_id, data) != 0) {
-        PIOS_MPU6000_ReleaseBus(interface_id, slave_num);
+        PIOS_MPU6000_ReleaseBus(interface_id, slave_num, false);
         return -3;
     }
 
-    PIOS_MPU6000_ReleaseBus(interface_id, slave_num);
+    PIOS_MPU6000_ReleaseBus(interface_id, slave_num, true);
 
     return 0;
 }

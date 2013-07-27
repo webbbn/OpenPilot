@@ -61,7 +61,6 @@ static int32_t PIOS_MPU6000_Validate(struct mpu6000_dev *dev);
 static void PIOS_MPU6000_Config(struct pios_mpu6000_cfg const *cfg);
 
 /* External interface fuctions */
-extern void PIOS_MPU6000_SetClockSpeed(uint32_t interface_id, SPIPrescalerTypeDef speed);
 extern int32_t PIOS_MPU6000_Read(uint32_t interface_id, uint8_t slave_num, uint8_t addr, uint8_t len, uint8_t *data);
 extern int32_t PIOS_MPU6000_GetReg(uint32_t interface_id, uint8_t slave_num, uint8_t reg);
 extern int32_t PIOS_MPU6000_SetReg(uint32_t interface_id, uint8_t slave_num, uint8_t reg, uint8_t data);
@@ -71,7 +70,7 @@ extern int32_t PIOS_MPU6000_SetReg(uint32_t interface_id, uint8_t slave_num, uin
 #ifdef PIOS_MPU6000_ACCEL
 #define PIOS_MPU6000_SAMPLES_BYTES 14
 #else
-#define PIOS_MPU6000_SAMPLE_BYTES  8
+#define PIOS_MPU6000_SAMPLES_BYTES  8
 #endif
 
 /**
@@ -134,9 +133,7 @@ int32_t PIOS_MPU6000_Init(uint32_t interface_id, uint32_t slave_num, const struc
     dev->cfg = cfg;
 
     /* Configure the MPU6000 Sensor */
-    PIOS_MPU6000_SetClockSpeed(dev->interface_id, PIOS_SPI_PRESCALER_256);
     PIOS_MPU6000_Config(cfg);
-    PIOS_MPU6000_SetClockSpeed(dev->interface_id, PIOS_SPI_PRESCALER_16);
 
     /* Set up EXTI line */
     PIOS_EXTI_Init(cfg->exti_cfg);
@@ -157,6 +154,7 @@ static void PIOS_MPU6000_Config(struct pios_mpu6000_cfg const *cfg)
     while (PIOS_MPU6000_SetReg(dev->interface_id, dev->slave_num, PIOS_MPU6000_PWR_MGMT_REG, PIOS_MPU6000_PWRMGMT_IMU_RST) != 0) {
         ;
     }
+
     PIOS_DELAY_WaitmS(50);
 
     // Reset chip and fifo
@@ -175,18 +173,9 @@ static void PIOS_MPU6000_Config(struct pios_mpu6000_cfg const *cfg)
         ;
     }
     PIOS_DELAY_WaitmS(10);
+
     // Power management configuration
     while (PIOS_MPU6000_SetReg(dev->interface_id, dev->slave_num, PIOS_MPU6000_PWR_MGMT_REG, cfg->Pwr_mgmt_clk) != 0) {
-        ;
-    }
-
-    // Interrupt configuration
-    while (PIOS_MPU6000_SetReg(dev->interface_id, dev->slave_num, PIOS_MPU6000_INT_CFG_REG, cfg->interrupt_cfg) != 0) {
-        ;
-    }
-
-    // Interrupt configuration
-    while (PIOS_MPU6000_SetReg(dev->interface_id, dev->slave_num, PIOS_MPU6000_INT_EN_REG, cfg->interrupt_en) != 0) {
         ;
     }
 
@@ -201,12 +190,13 @@ static void PIOS_MPU6000_Config(struct pios_mpu6000_cfg const *cfg)
     }
 #endif
     PIOS_MPU6000_ConfigureRanges(cfg->gyro_range, cfg->accel_range, cfg->filter);
-    // Interrupt configuration
+
+    // User control configuration
     while (PIOS_MPU6000_SetReg(dev->interface_id, dev->slave_num, PIOS_MPU6000_USER_CTRL_REG, cfg->User_ctl) != 0) {
         ;
     }
 
-    // Interrupt configuration
+    // Power managementconfiguration
     while (PIOS_MPU6000_SetReg(dev->interface_id, dev->slave_num, PIOS_MPU6000_PWR_MGMT_REG, cfg->Pwr_mgmt_clk) != 0) {
         ;
     }
@@ -239,11 +229,6 @@ int32_t PIOS_MPU6000_ConfigureRanges(
         return -1;
     }
 
-    // TODO: check that changing the SPI clock speed is safe
-    // to do here given that interrupts are enabled and the bus has
-    // not been claimed/is not claimed during this call
-    PIOS_MPU6000_SetClockSpeed(dev->interface_id, PIOS_SPI_PRESCALER_256);
-
     // update filter settings
     while (PIOS_MPU6000_SetReg(dev->interface_id, dev->slave_num, PIOS_MPU6000_DLPF_CFG_REG, filterSetting) != 0) {
         ;
@@ -272,7 +257,6 @@ int32_t PIOS_MPU6000_ConfigureRanges(
 
     dev->accel_range = accelRange;
 #endif
-    PIOS_MPU6000_SetClockSpeed(dev->interface_id, PIOS_SPI_PRESCALER_16);
     return 0;
 }
 

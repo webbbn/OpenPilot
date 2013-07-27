@@ -69,10 +69,16 @@ static int32_t PIOS_MPU6000_I2CRead(uint32_t interface_id, uint8_t slave_num, ui
 }
 
 /**
- * @brief Change the interface clock speed
+ * @brief Claim / release the bus.
  */
-void PIOS_MPU6000_SetClockSpeed(__attribute__((unused)) uint32_t interface_id, __attribute__((unused)) SPIPrescalerTypeDef speed)
-{}
+int32_t PIOS_MPU6000_ClaimBus(__attribute__((unused)) uint32_t interface_id, __attribute__((unused)) uint8_t slave_num)
+{
+    return 0;
+}
+int32_t PIOS_MPU6000_ReleaseBus(__attribute__((unused)) uint32_t interface_id, __attribute__((unused)) uint8_t slave_num)
+{
+    return 0;
+}
 
 /**
  * @brief Read data from the MPU6000
