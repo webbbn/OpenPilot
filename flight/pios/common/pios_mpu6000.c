@@ -50,6 +50,25 @@ struct mpu6000_dev {
     enum pios_mpu6000_dev_magic   magic;
 };
 
+struct __attribute__((__packed__)) mpu6000_sensor_data {
+#if defined(PIOS_MPU6000_ACCEL)
+    uint8_t accel_y_msb;
+    uint8_t accel_y_lsb;
+    uint8_t accel_x_msb;
+    uint8_t accel_x_lsb;
+    uint8_t accel_z_msb;
+    uint8_t accel_z_lsb;
+#endif /* PIOS_MPU6000_ACCEL */
+    uint8_t temp_msb;
+    uint8_t temp_lsb;
+    uint8_t gyro_y_msb;
+    uint8_t gyro_y_lsb;
+    uint8_t gyro_x_msb;
+    uint8_t gyro_x_lsb;
+    uint8_t gyro_z_msb;
+    uint8_t gyro_z_lsb;
+};
+
 /* Global Variables */
 static struct mpu6000_dev *dev;
 volatile bool mpu6000_configured = false;
@@ -403,88 +422,64 @@ static void PIOS_MPU6000_FifoReset()
  */
 static void PIOS_MPU6000_Rotate(struct pios_mpu6000_data *data, const uint8_t *buf)
 {
+    struct mpu6000_sensor_data *in = (struct mpu6000_sensor_data*)buf;
+
     // Rotate the sensor to OP convention.  The datasheet defines X as towards the right
     // and Y as forward.  OP convention transposes this.  Also the Z is defined negatively
     // to our convention
 #if defined(PIOS_MPU6000_ACCEL)
-    uint8_t accel_y_msb = buf[0];
-    uint8_t accel_y_lsb = buf[1];
-    uint8_t accel_x_msb = buf[2];
-    uint8_t accel_x_lsb = buf[3];
-    uint8_t accel_z_msb = buf[4];
-    uint8_t accel_z_lsb = buf[5];
-    uint8_t temp_msb    = buf[6];
-    uint8_t temp_lsb    = buf[7];
-    uint8_t gyro_y_msb  = buf[8];
-    uint8_t gyro_y_lsb  = buf[9];
-    uint8_t gyro_x_msb  = buf[10];
-    uint8_t gyro_x_lsb  = buf[11];
-    uint8_t gyro_z_msb  = buf[12];
-    uint8_t gyro_z_lsb  = buf[13];
-
     // Currently we only support rotations on top so switch X/Y accordingly
     switch (dev->cfg->orientation) {
     case PIOS_MPU6000_TOP_0DEG:
-        data->accel_y = accel_y_msb << 8 | accel_y_lsb; // chip X
-        data->accel_x = accel_x_msb << 8 | accel_x_lsb; // chip Y
-        data->gyro_y  = gyro_y_msb << 8 | gyro_y_lsb; // chip X
-        data->gyro_x  = gyro_x_msb << 8 | gyro_x_lsb; // chip Y
+        data->accel_y = in->accel_y_msb << 8 | in->accel_y_lsb; // chip X
+        data->accel_x = in->accel_x_msb << 8 | in->accel_x_lsb; // chip Y
+        data->gyro_y  = in->gyro_y_msb << 8 | in->gyro_y_lsb; // chip X
+        data->gyro_x  = in->gyro_x_msb << 8 | in->gyro_x_lsb; // chip Y
         break;
     case PIOS_MPU6000_TOP_90DEG:
         // -1 to bring it back to -32768 +32767 range
-        data->accel_y = -1 - (accel_x_msb << 8 | accel_x_lsb); // chip Y
-        data->accel_x = accel_y_msb << 8 | accel_y_lsb; // chip X
-        data->gyro_y  = -1 - (gyro_x_msb << 8 | gyro_x_lsb); // chip Y
-        data->gyro_x  = gyro_y_msb << 8 | gyro_y_lsb; // chip X
+        data->accel_y = -1 - (in->accel_x_msb << 8 | in->accel_x_lsb); // chip Y
+        data->accel_x = in->accel_y_msb << 8 | in->accel_y_lsb; // chip X
+        data->gyro_y  = -1 - (in->gyro_x_msb << 8 | in->gyro_x_lsb); // chip Y
+        data->gyro_x  = in->gyro_y_msb << 8 | in->gyro_y_lsb; // chip X
         break;
     case PIOS_MPU6000_TOP_180DEG:
-        data->accel_y = -1 - (accel_y_msb << 8 | accel_y_lsb); // chip X
-        data->accel_x = -1 - (accel_x_msb << 8 | accel_x_lsb); // chip Y
-        data->gyro_y  = -1 - (gyro_y_msb << 8 | gyro_y_lsb); // chip X
-        data->gyro_x  = -1 - (gyro_x_msb << 8 | gyro_x_lsb); // chip Y
+        data->accel_y = -1 - (in->accel_y_msb << 8 | in->accel_y_lsb); // chip X
+        data->accel_x = -1 - (in->accel_x_msb << 8 | in->accel_x_lsb); // chip Y
+        data->gyro_y  = -1 - (in->gyro_y_msb << 8 | in->gyro_y_lsb); // chip X
+        data->gyro_x  = -1 - (in->gyro_x_msb << 8 | in->gyro_x_lsb); // chip Y
         break;
     case PIOS_MPU6000_TOP_270DEG:
-        data->accel_y = accel_x_msb << 8 | accel_x_lsb; // chip Y
-        data->accel_x = -1 - (accel_y_msb << 8 | accel_y_lsb); // chip X
-        data->gyro_y  = gyro_x_msb << 8 | gyro_x_lsb; // chip Y
-        data->gyro_x  = -1 - (gyro_y_msb << 8 | gyro_y_lsb); // chip X
+        data->accel_y = in->accel_x_msb << 8 | in->accel_x_lsb; // chip Y
+        data->accel_x = -1 - (in->accel_y_msb << 8 | in->accel_y_lsb); // chip X
+        data->gyro_y  = in->gyro_x_msb << 8 | in->gyro_x_lsb; // chip Y
+        data->gyro_x  = -1 - (in->gyro_y_msb << 8 | in->gyro_y_lsb); // chip X
         break;
     }
-    data->gyro_z      = -1 - (gyro_z_msb << 8 | gyro_z_lsb);
-    data->accel_z     = -1 - (accel_z_msb << 8 | accel_z_lsb);
-    data->temperature = temp_msb << 8 | temp_lsb;
+    data->gyro_z      = -1 - (in->gyro_z_msb << 8 | in->gyro_z_lsb);
+    data->accel_z     = -1 - (in->accel_z_msb << 8 | in->accel_z_lsb);
+    data->temperature = in->temp_msb << 8 | in->temp_lsb;
 #else /* if defined(PIOS_MPU6000_ACCEL) */
-    uint8_t temp_msb   = buf[0];
-    uint8_t temp_lsb   = buf[1];
-    uint8_t gyro_y_msb = buf[2];
-    uint8_t gyro_y_lsb = buf[3];
-    uint8_t gyro_x_msb = buf[4];
-    uint8_t gyro_x_lsb = buf[5];
-    uint8_t gyro_z_msb = buf[6];
-    uint8_t gyro_z_lsb = buf[7];
-
-    data->gyro_x = accel_x_msb << 8 | accel_x_lsb;
-    data->gyro_y = accel_z_msb << 8 | accel_z_lsb;
     switch (dev->cfg->orientation) {
     case PIOS_MPU6000_TOP_0DEG:
-        data->gyro_y = accel_x_msb << 8 | accel_x_lsb;
-        data->gyro_x = accel_z_msb << 8 | accel_z_lsb;
+        data->gyro_y = in->gyro_y_msb << 8 | in->gyro_y_lsb;
+        data->gyro_x = in->gyro_x_msb << 8 | in->gyro_x_lsb;
         break;
     case PIOS_MPU6000_TOP_90DEG:
-        data->gyro_y = -1 - (accel_z_msb << 8 | accel_z_lsb); // chip Y
-        data->gyro_x = accel_x_msb << 8 | accel_x_lsb; // chip X
+        data->gyro_y = -1 - (in->gyro_x_msb << 8 | in->gyro_x_lsb); // chip Y
+        data->gyro_x = in->gyro_y_msb << 8 | in->gyro_y_lsb; // chip X
         break;
     case PIOS_MPU6000_TOP_180DEG:
-        data->gyro_y = -1 - (accel_x_msb << 8 | accel_x_lsb);
-        data->gyro_x = -1 - (accel_z_msb << 8 | accel_z_lsb);
+        data->gyro_y = -1 - (in->gyro_y_msb << 8 | in->gyro_y_lsb);
+        data->gyro_x = -1 - (in->gyro_x_msb << 8 | in->gyro_x_lsb);
         break;
     case PIOS_MPU6000_TOP_270DEG:
-        data->gyro_y = accel_z_msb << 8 | accel_z_lsb; // chip Y
-        data->gyro_x = -1 - (accel_x_msb << 8 | accel_x_lsb); // chip X
+        data->gyro_y = in->gyro_x_msb << 8 | in->gyro_x_lsb; // chip Y
+        data->gyro_x = -1 - (in->gyro_y_msb << 8 | in->gyro_y_lsb); // chip X
         break;
     }
-    data->gyro_z = -1 - (temp_msb << 8 | temp_lsb);
-    data->temperature = accel_y_msb << 8 | accel_y_lsb;
+    data->gyro_z = -1 - (in->gyro_z_msb << 8 | in->gyro_z_lsb);
+    data->temperature = in->temp_msb << 8 | in->temp_lsb;
 #endif /* if defined(PIOS_MPU6000_ACCEL) */
 }
 
