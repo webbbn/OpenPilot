@@ -30,6 +30,9 @@
 #include <uavobjectsinit.h>
 #include <hwsettings.h>
 #include <manualcontrolsettings.h>
+#include <oplinkreceiver.h>
+#include <pios_oplinkrcvr_priv.h>
+#include <pios_rcvr_priv.h>
 #include <gcsreceiver.h>
 #include <taskinfo.h>
 
@@ -219,6 +222,19 @@ void PIOS_Board_Init(void)
     }
     pios_rcvr_group_map[MANUALCONTROLSETTINGS_CHANNELGROUPS_GCS] = pios_gcsrcvr_rcvr_id;
 #endif /* PIOS_INCLUDE_GCSRCVR */
+
+#if defined(PIOS_INCLUDE_OPLINKRCVR)
+    {
+        OPLinkReceiverInitialize();
+        uint32_t pios_oplinkrcvr_id;
+        PIOS_OPLinkRCVR_Init(&pios_oplinkrcvr_id);
+        uint32_t pios_oplinkrcvr_rcvr_id;
+        if (PIOS_RCVR_Init(&pios_oplinkrcvr_rcvr_id, &pios_oplinkrcvr_rcvr_driver, pios_oplinkrcvr_id)) {
+            PIOS_Assert(0);
+        }
+        pios_rcvr_group_map[MANUALCONTROLSETTINGS_CHANNELGROUPS_OPLINK] = pios_oplinkrcvr_rcvr_id;
+    }
+#endif /* PIOS_INCLUDE_OPLINKRCVR */
 
     /* Initialize the motor PWM controls */
     PIOS_Servo_Init(&pios_servo_cfg);

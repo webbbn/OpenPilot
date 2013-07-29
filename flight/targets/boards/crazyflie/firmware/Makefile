@@ -100,6 +100,7 @@ ifndef TESTAPP
     SRC += $(OPUAVSYNTHDIR)/gpsvelocitysensor.c
     SRC += $(OPUAVSYNTHDIR)/hwsettings.c
     SRC += $(OPUAVSYNTHDIR)/gcsreceiver.c
+    SRC += $(OPUAVSYNTHDIR)/oplinkreceiver.c
     SRC += $(OPUAVSYNTHDIR)/receiveractivity.c
     SRC += $(OPUAVSYNTHDIR)/relaytuningsettings.c
     SRC += $(OPUAVSYNTHDIR)/relaytuning.c

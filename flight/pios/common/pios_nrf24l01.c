@@ -32,9 +32,13 @@
 
 #ifdef PIOS_INCLUDE_NRF24L01
 
+#define RECEIVE_MODE
+
 #include <pios_spi.h>
 #include <pios_gpio_priv.h>
 #include <pios_nrf24l01_priv.h>
+#include <uavobjectmanager.h>
+#include <oplinkreceiver.h>
 
 /* NRF24L SPI commands */
 #define PIOS_NRF24L01_CMD_R_REG            0x00
@@ -79,9 +83,9 @@
 #define PIOS_NRF24L01_REG_DYNPD            0x1C
 #define PIOS_NRF24L01_REG_FEATURE          0x1D
 
-#define PIOS_NRF24L01_RF_SETUP_250K        0x26
-#define PIOS_NRF24L01_RF_SETUP_1M          0x06
-#define PIOS_NRF24L01_RF_SETUP_2M          0x0E
+#define PIOS_NRF24L01_RF_SETUP_250K        0x23
+#define PIOS_NRF24L01_RF_SETUP_1M          0x07
+#define PIOS_NRF24L01_RF_SETUP_2M          0x0f
 
 #define PIOS_NRF24L01_SETUP_AW_3B          1
 #define PIOS_NRF24L01_SETUP_AW_4B          2
@@ -92,7 +96,7 @@
 #define TASK_PRIORITY                      (tskIDLE_PRIORITY + 2)
 
 /* Defaults */
-#define PIOS_NRF24L01_DEFAULT_DATARATE     PIOS_NRF24L01_RF_SETUP_250K
+#define PIOS_NRF24L01_DEFAULT_DATARATE     PIOS_NRF24L01_RATE_250K
 #define PIOS_NRF24L01_DEFAULT_CHANNEL      10
 static const uint8_t PIOS_NRF24L01_DEFAULT_RADIO_ADDRESS[5] = { 0xE7, 0xE7, 0xE7, 0xE7, 0xE7 };
 
@@ -141,31 +145,29 @@ int32_t PIOS_NRF24L01_Init(uint32_t *nfr24l01_id, uint32_t spi_id, const struct 
     dev->gpios.num_gpios = 1;
     *nfr24l01_id         = (uint32_t)dev;
 
-    /* Disable the chip select */
-    PIOS_NRF24L01_ChipDeselect(dev);
-
     /* Configure the GPIO line */
     PIOS_GPIO_Init(&dev->ce_gpio, &dev->gpios);
+
+    /* Disable the chip select */
+    PIOS_NRF24L01_ChipDeselect(dev);
 
     /* Disable the chip enable */
     PIOS_NRF24L01_ChipDisable(dev);
 
-    /* Configure up EXTI line */
-    PIOS_EXTI_Init(cfg->exti_cfg);
-
-    /* Default the datarate and channel. */
-    PIOS_NRF24L01_SetChannel(*nfr24l01_id, PIOS_NRF24L01_DEFAULT_CHANNEL);
-    PIOS_NRF24L01_SetDatarate(*nfr24l01_id, PIOS_NRF24L01_DEFAULT_DATARATE);
-
-    /* Set the radio address */
-    PIOS_NRF24L01_SetAddress(*nfr24l01_id, 0, PIOS_NRF24L01_DEFAULT_RADIO_ADDRESS);
-
+#ifdef RECEIVE_MODE
     /* Power the radio, Enable the DS interruption, set the radio in PRX mode */
     PIOS_NRF24L01_Write1Reg(dev, PIOS_NRF24L01_REG_CONFIG, 0x3F);
     uint8_t val = PIOS_NRF24L01_Read1Reg(dev, PIOS_NRF24L01_REG_CONFIG);
     if (val != 0x3f) {
         PIOS_Assert(0);
     }
+#else
+    PIOS_NRF24L01_Write1Reg(dev, PIOS_NRF24L01_REG_CONFIG, 0x7e);
+    uint8_t val = PIOS_NRF24L01_Read1Reg(dev, PIOS_NRF24L01_REG_CONFIG);
+    if (val != 0x7e) {
+        PIOS_Assert(0);
+    }
+#endif
 
     /* Wait for the chip to be ready */
     vTaskDelay(2 * configTICK_RATE_HZ / 1000);
@@ -173,6 +175,13 @@ int32_t PIOS_NRF24L01_Init(uint32_t *nfr24l01_id, uint32_t spi_id, const struct 
     /* Enable the dynamic payload size and the ack payload for the pipe 0 */
     PIOS_NRF24L01_Write1Reg(dev, PIOS_NRF24L01_REG_FEATURE, 0x06);
     PIOS_NRF24L01_Write1Reg(dev, PIOS_NRF24L01_REG_DYNPD, 0x01);
+
+    /* Default the datarate and channel. */
+    PIOS_NRF24L01_SetChannel((uint32_t)dev, PIOS_NRF24L01_DEFAULT_CHANNEL);
+    PIOS_NRF24L01_SetDatarate((uint32_t)dev, PIOS_NRF24L01_DEFAULT_DATARATE);
+
+    /* Set the radio address */
+    PIOS_NRF24L01_SetAddress((uint32_t)dev, 0, PIOS_NRF24L01_DEFAULT_RADIO_ADDRESS);
 
     /* Flush RX and Tx */
     for (uint8_t i = 0; i < 3; i++) {
@@ -184,6 +193,9 @@ int32_t PIOS_NRF24L01_Init(uint32_t *nfr24l01_id, uint32_t spi_id, const struct 
 
     /* Initialise the semaphore */
     vSemaphoreCreateBinary(dev->data_ready);
+
+    /* Configure up EXTI line */
+    PIOS_EXTI_Init(cfg->exti_cfg);
 
     /*
      * Start the driver task.
@@ -305,6 +317,7 @@ uint8_t PIOS_NRF24L01_ReceivePacket(uint32_t nrf24l01_id, uint8_t *buffer, uint8
 
         // Drop packets that are too long.
         if (datalen > len) {
+            datalen = 0;
             PIOS_NRF24L01_FlushRx(dev);
             break;
         }
@@ -339,7 +352,8 @@ uint8_t PIOS_NRF24L01_SendPacket(uint32_t nrf24l01_id, uint8_t *buffer, uint8_t 
     struct pios_nrf24l01_dev *dev = (struct pios_nrf24l01_dev *)nrf24l01_id;
 
     // Turn on the Tx LED.
-    PIOS_LED_On(PIOS_LED_TX);
+    // PIOS_LED_On(PIOS_LED_TX);
+    PIOS_LED_Toggle(PIOS_LED_TX);
 
     // Disable receive.
     PIOS_NRF24L01_ChipDisable(dev);
@@ -348,7 +362,7 @@ uint8_t PIOS_NRF24L01_SendPacket(uint32_t nrf24l01_id, uint8_t *buffer, uint8_t 
     PIOS_NRF24L01_ChipSelect(dev);
 
     // Send the read command with the address
-    PIOS_NRF24L01_SendByte(dev, PIOS_NRF24L01_CMD_W_ACK_PAYLOAD(0));
+    PIOS_NRF24L01_SendByte(dev, PIOS_NRF24L01_CMD_W_PAYLOAD_NO_ACK);
 
     // Send the bytes.
     for (uint8_t i = 0; i < len; ++i) {
@@ -357,6 +371,14 @@ uint8_t PIOS_NRF24L01_SendPacket(uint32_t nrf24l01_id, uint8_t *buffer, uint8_t 
 
     // Set the chip select.
     PIOS_NRF24L01_ChipDeselect(dev);
+
+    // Pulse the CE line.
+    PIOS_NRF24L01_ChipEnable(dev);
+    PIOS_DELAY_WaituS(100);
+    PIOS_NRF24L01_ChipDisable(dev);
+
+    // Turn off the Tx LED.
+    // PIOS_LED_Off(PIOS_LED_TX);
 
     return len;
 }
@@ -371,11 +393,24 @@ static void PIOS_NRF24L01_Task(void *parameters)
     struct pios_nrf24l01_dev *dev = (struct pios_nrf24l01_dev *)parameters;
 
     while (1) {
+#ifdef RECEIVE_MODE
         // Read a packet from the radio device.
         int8_t len = PIOS_NRF24L01_ReceivePacket((uint32_t)dev, dev->rx_buffer, 32, portMAX_DELAY);
         if (len == 0) {
             PIOS_NRF24L01_ReadStatus(dev);
         }
+        if (len == 16) {
+            OPLinkReceiverData opl_rcvr;
+            for (uint8_t i = 0; i < 8; ++i) {
+                opl_rcvr.Channel[i] = ((int32_t)dev->rx_buffer[i * 2 + 1] << 8) + (int32_t)dev->rx_buffer[i * 2];
+            }
+            OPLinkReceiverSet(&opl_rcvr);
+        }
+#else
+        PIOS_NRF24L01_SendPacket((uint32_t)dev, dev->rx_buffer, 10);
+        vTaskDelay(200 * configTICK_RATE_HZ / 1000);
+        PIOS_NRF24L01_ReadStatus(dev);
+#endif
     }
 }
 
@@ -602,17 +637,27 @@ static uint8_t PIOS_NRF24L01_RxLength(struct pios_nrf24l01_dev *dev)
 }
 
 /**
- * Read an Rx packet
+ * Read an Rx packet into the supplied buffer.
  *
  * @param[in] dev  The device pointer.
- * @param[out] buffer The buffer to read into
+ * @param[out] buffer The buffer to read into.
  * @param[in] len  The number of bytes to read.
  * @return The number of bytes read.
  */
 static uint8_t PIOS_NRF24L01_ReadRX(struct pios_nrf24l01_dev *dev, uint8_t *buffer, uint8_t len)
 {
+
     PIOS_NRF24L01_ChipSelect(dev);
 
+    /* Send the read command with the address */
+    PIOS_NRF24L01_SendByte(dev, PIOS_NRF24L01_CMD_R_RX_PAYLOAD);
+
+    /* Read len bytes */
+    if (PIOS_SPI_TransferBlock(dev->spi_id, NULL, buffer, len, NULL) != 0) {
+        len = 0;
+    }
+
+#ifdef NEVER
     /* Send the read command with the address */
     PIOS_NRF24L01_SendByte(dev, PIOS_NRF24L01_CMD_R_RX_PAYLOAD);
 
@@ -620,6 +665,7 @@ static uint8_t PIOS_NRF24L01_ReadRX(struct pios_nrf24l01_dev *dev, uint8_t *buff
     for (uint8_t i = 0; i < len; i++) {
         buffer[i] = PIOS_NRF24L01_ReceiveByte(dev);
     }
+#endif
 
     PIOS_NRF24L01_ChipDeselect(dev);
 
