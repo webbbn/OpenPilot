@@ -93,7 +93,7 @@
 
 /* Task constants */
 #define STACK_SIZE_BYTES                   100
-#define TASK_PRIORITY                      (tskIDLE_PRIORITY + 2)
+#define TASK_PRIORITY                      (tskIDLE_PRIORITY + 4)
 
 /* Defaults */
 #define PIOS_NRF24L01_DEFAULT_DATARATE     PIOS_NRF24L01_RATE_250K
@@ -196,6 +196,9 @@ int32_t PIOS_NRF24L01_Init(uint32_t *nfr24l01_id, uint32_t spi_id, const struct 
 
     /* Configure up EXTI line */
     PIOS_EXTI_Init(cfg->exti_cfg);
+
+    /* Initialize the OPLinkReceiver object. */
+    OPLinkReceiverInitialize();
 
     /*
      * Start the driver task.
@@ -383,6 +386,22 @@ uint8_t PIOS_NRF24L01_SendPacket(uint32_t nrf24l01_id, uint8_t *buffer, uint8_t 
     return len;
 }
 
+static uint32_t Crc(const uint8_t *buffer, uint32_t size)
+{
+    uint32_t crc = ~0;
+    const uint8_t *position = buffer;
+
+    while (size--) {
+        crc ^= *position++;
+        for (uint32_t bit = 0; bit < 8; bit++) {
+            int32_t out = crc & 1;
+            crc >>= 1;
+            crc ^= -out & 0xEDB88320;
+        }
+    }
+    return ~crc;
+}
+
 /**
  * Assert the Chip Enable (CE) line.
  *
@@ -399,10 +418,21 @@ static void PIOS_NRF24L01_Task(void *parameters)
         if (len == 0) {
             PIOS_NRF24L01_ReadStatus(dev);
         }
-        if (len == 16) {
+        if (len == 20) {
+
+            // Verify the CRC.
+            uint32_t crc = Crc(dev->rx_buffer, 16);
+            uint32_t pcrc = (dev->rx_buffer[16] << 24);
+            pcrc += (dev->rx_buffer[17] << 16);
+            pcrc += (dev->rx_buffer[18] << 8);
+            pcrc += dev->rx_buffer[19];
+            if (crc  != pcrc) {
+                continue;
+            }
             OPLinkReceiverData opl_rcvr;
             for (uint8_t i = 0; i < 8; ++i) {
-                opl_rcvr.Channel[i] = ((int32_t)dev->rx_buffer[i * 2 + 1] << 8) + (int32_t)dev->rx_buffer[i * 2];
+                int32_t val = ((int32_t)dev->rx_buffer[i * 2 + 1] << 8) + (int32_t)dev->rx_buffer[i * 2];
+                opl_rcvr.Channel[i] = (val < 1000) ? 1000 : ((val > 2000) ? 2000 : val);
             }
             OPLinkReceiverSet(&opl_rcvr);
         }
@@ -591,7 +621,6 @@ static uint8_t PIOS_NRF24L01_ReadStatus(struct pios_nrf24l01_dev *dev)
     return status;
 }
 
-
 /**
  * Flush the Rx buffer
  *
@@ -656,16 +685,6 @@ static uint8_t PIOS_NRF24L01_ReadRX(struct pios_nrf24l01_dev *dev, uint8_t *buff
     if (PIOS_SPI_TransferBlock(dev->spi_id, NULL, buffer, len, NULL) != 0) {
         len = 0;
     }
-
-#ifdef NEVER
-    /* Send the read command with the address */
-    PIOS_NRF24L01_SendByte(dev, PIOS_NRF24L01_CMD_R_RX_PAYLOAD);
-
-    /* Read LEN bytes */
-    for (uint8_t i = 0; i < len; i++) {
-        buffer[i] = PIOS_NRF24L01_ReceiveByte(dev);
-    }
-#endif
 
     PIOS_NRF24L01_ChipDeselect(dev);
 
