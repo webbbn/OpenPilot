@@ -72,6 +72,9 @@ int main()
                              &initTaskHandle);
     PIOS_Assert(result == pdPASS);
 
+    /* swap the stack to use the IRQ stack */
+    Stack_Change();
+
     /* Start the FreeRTOS scheduler */
     vTaskStartScheduler();
 
