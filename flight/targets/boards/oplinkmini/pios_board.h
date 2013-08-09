@@ -200,11 +200,6 @@ extern uint32_t pios_ppm_out_id;
 // ADC
 // None
 // -------------------------
-// #define PIOS_ADC_OVERSAMPLING_RATE		1
-#define PIOS_ADC_USE_TEMP_SENSOR         0
-#define PIOS_ADC_TEMP_SENSOR_ADC         ADC1
-#define PIOS_ADC_TEMP_SENSOR_ADC_CHANNEL 1
-
 #define PIOS_ADC_NUM_PINS                0
 
 #define PIOS_ADC_PORTS                   {}
@@ -212,7 +207,7 @@ extern uint32_t pios_ppm_out_id;
 #define PIOS_ADC_CHANNELS                {}
 #define PIOS_ADC_MAPPING                 {}
 #define PIOS_ADC_CHANNEL_MAPPING         {}
-#define PIOS_ADC_NUM_CHANNELS            (PIOS_ADC_NUM_PINS + PIOS_ADC_USE_TEMP_SENSOR)
+#define PIOS_ADC_NUM_CHANNELS            (PIOS_ADC_NUM_PINS)
 #define PIOS_ADC_NUM_ADC_CHANNELS        0
 #define PIOS_ADC_USE_ADC2                0
 #define PIOS_ADC_CLOCK_FUNCTION          RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1 | RCC_APB2Periph_ADC2, ENABLE)

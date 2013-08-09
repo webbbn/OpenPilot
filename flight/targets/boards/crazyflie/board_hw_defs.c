@@ -41,7 +41,7 @@ static const struct pios_gpio pios_leds[] = {
         .remap              = GPIO_Remap_SWJ_JTAGDisable,
         .active_low         = true
     },
-    [PIOS_LED_RADIO] =     {
+    [PIOS_LED_ALARM] =     {
         .pin                =             {
             .gpio = GPIOB,
             .init =             {
@@ -77,10 +77,68 @@ static const struct pios_gpio pios_gpios[] = {
             .init =               {
                 .GPIO_Pin   = GPIO_Pin_0,
                 .GPIO_Mode  = GPIO_Mode_Out_PP,
-                .GPIO_Speed = GPIO_Speed_50MHz,
+                .GPIO_Speed = GPIO_Speed_2MHz,
             },
         },
+        .active_low = false
     },
+#ifdef PIOS_INCLUDE_BQ24075
+    [PIOS_GPIO_PM_PGOOD] = {
+        .pin                =               {
+            .gpio = GPIOC,
+            .init =               {
+                .GPIO_Pin   = GPIO_Pin_15,
+                .GPIO_Mode  = GPIO_Mode_IN_FLOATING,
+                .GPIO_Speed = GPIO_Speed_2MHz,
+            },
+        },
+        .active_low = true
+    },
+    [PIOS_GPIO_PM_CHG] = {
+        .pin                =               {
+            .gpio = GPIOB,
+            .init =               {
+                .GPIO_Pin   = GPIO_Pin_2,
+                .GPIO_Mode  = GPIO_Mode_IPU,
+                .GPIO_Speed = GPIO_Speed_2MHz,
+            },
+        },
+        .active_low = true
+    },
+    [PIOS_GPIO_PM_EN1] = {
+        .pin                =               {
+            .gpio = GPIOC,
+            .init =               {
+                .GPIO_Pin   = GPIO_Pin_13,
+                .GPIO_Mode  = GPIO_Mode_Out_PP,
+                .GPIO_Speed = GPIO_Speed_10MHz,
+            },
+        },
+        .active_low = false
+    },
+    [PIOS_GPIO_PM_EN2] = {
+        .pin                =               {
+            .gpio = GPIOA,
+            .init =               {
+                .GPIO_Pin   = GPIO_Pin_2,
+                .GPIO_Mode  = GPIO_Mode_Out_PP,
+                .GPIO_Speed = GPIO_Speed_10MHz,
+            },
+        },
+        .active_low = false
+    },
+    [PIOS_GPIO_PM_SYSOFF] = {
+        .pin                =               {
+            .gpio = GPIOA,
+            .init =               {
+                .GPIO_Pin   = GPIO_Pin_1,
+                .GPIO_Mode  = GPIO_Mode_Out_PP,
+                .GPIO_Speed = GPIO_Speed_10MHz,
+            },
+        },
+        .active_low = false
+    },
+#endif /* PIOS_INCLUDE_BQ24075 */
 };
 
 static const struct pios_gpio_cfg pios_gpios_cfg = {
@@ -254,6 +312,13 @@ static const struct pios_nrf24l01_cfg pios_nrf24l01_cfg = {
     .exti_cfg = &pios_exti_nrf24l01_cfg
 };
 #endif /* PIOS_INCLUDE_NRF24L01 */
+
+#if defined(PIOS_INCLUDE_BQ24075)
+#include <pios_bq24075_priv.h>
+static const struct pios_bq24075_cfg pios_bq24075_cfg = {
+    .gpios = pios_gpios,
+};
+#endif /* PIOS_INCLUDE_BQ24075 */
 
 #if defined(PIOS_INCLUDE_FLASH)
 #include "pios_flashfs_logfs_priv.h"
@@ -675,3 +740,48 @@ const struct pios_usb_cdc_cfg pios_usb_cdc_cfg = {
     .data_tx_ep = 3,
 };
 #endif /* PIOS_INCLUDE_USB_CDC */
+
+/*
+ * ADC system
+ */
+#if defined(PIOS_INCLUDE_ADC)
+#include "pios_adc_priv.h"
+extern void PIOS_ADC_handler(void);
+void DMA1_Channel1_IRQHandler() __attribute__((alias("PIOS_ADC_handler")));
+// Remap the ADC DMA handler to this one
+static const struct pios_adc_cfg pios_adc_cfg = {
+    .dma                                           = {
+        .ahb_clk = RCC_AHBPeriph_DMA1,
+        .irq     = {
+            .flags = (DMA1_FLAG_TC1 | DMA1_FLAG_TE1 | DMA1_FLAG_HT1 | DMA1_FLAG_GL1),
+            .init  = {
+                .NVIC_IRQChannel    = DMA1_Channel1_IRQn,
+                .NVIC_IRQChannelPreemptionPriority = PIOS_IRQ_PRIO_HIGH,
+                .NVIC_IRQChannelSubPriority        = 0,
+                .NVIC_IRQChannelCmd = ENABLE,
+            },
+        },
+        .rx                                        = {
+            .channel = DMA1_Channel1,
+            .init    = {
+                .DMA_PeripheralBaseAddr            = (uint32_t)&ADC1->DR,
+                .DMA_DIR                           = DMA_DIR_PeripheralSRC,
+                .DMA_PeripheralInc      = DMA_PeripheralInc_Disable,
+                .DMA_MemoryInc          = DMA_MemoryInc_Enable,
+                .DMA_PeripheralDataSize = DMA_PeripheralDataSize_Word,
+                .DMA_MemoryDataSize     = DMA_MemoryDataSize_Word,
+                .DMA_Mode     = DMA_Mode_Circular,
+                .DMA_Priority = DMA_Priority_High,
+                .DMA_M2M                           = DMA_M2M_Disable,
+            },
+        }
+    },
+    .half_flag = DMA1_IT_HT1,
+    .full_flag = DMA1_IT_TC1,
+};
+
+void PIOS_ADC_handler()
+{
+    PIOS_ADC_DMA_Handler();
+}
+#endif /* if defined(PIOS_INCLUDE_ADC) */

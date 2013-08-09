@@ -2,13 +2,13 @@
  ******************************************************************************
  * @addtogroup PIOS PIOS Core hardware abstraction layer
  * @{
- * @addtogroup   PIOS_NFR24L01 Radio Functions
- * @brief PIOS interface for for the NFR24L01 radio
+ * @addtogroup   PIOS_BQ24075 Radio Functions
+ * @brief PIOS interface for for the BQ24075 power management unit.
  * @{
  *
- * @file       pios_nfr24l01_priv.h
+ * @file       pios_bq24075_priv.h
  * @author     The OpenPilot Team, http://www.openpilot.org Copyright (C) 2013.
- * @brief      Implements a driver the the nfr24l01 radio
+ * @brief      Implements a driver the the nfr24l01 power management unit.
  * @see        The GNU Public License (GPL) Version 3
  *
  *****************************************************************************/
@@ -28,22 +28,20 @@
  * 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
 
-#ifndef PIOS_NRR24L01_PRIV_H
-#define PIOS_NRR24L01_PRIV_H
+#ifndef PIOS_BQ24075_PRIV_H
+#define PIOS_BQ24075_PRIV_H
 
-#include <pios_nrf24l01.h>
+#include <pios_bq24075.h>
 
 /* Global Types */
-struct pios_nrf24l01_cfg {
-    const struct pios_gpio *gpio_cfg; /* Pointer to the GPIO for the CE line */
-    const struct pios_exti_cfg *exti_cfg; /* Pointer to the EXTI configuration */
+struct pios_bq24075_cfg {
+    const struct pios_gpio *gpios; /* Pointer to the GPIOs */
 };
 
 /* Public Functions */
-extern int32_t PIOS_NRF24L01_Init(uint32_t *nrf24l01_id, uint32_t spi_id, const struct pios_nrf24l01_cfg *cfg);
-extern bool PIOS_NRF24L01_IRQHandler(uint32_t nrf24l01_id);
+extern int32_t PIOS_BQ24075_Init(uint32_t *bq24075_id, uint32_t gpio_id);
 
-#endif /* PIOS_NRF24L01_PRIV_H */
+#endif /* PIOS_BQ24075_PRIV_H */
 
 /**
  * @}

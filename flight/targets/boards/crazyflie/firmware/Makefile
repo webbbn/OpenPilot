@@ -37,6 +37,7 @@ MODULES += Actuator
 MODULES += ManualControl
 MODULES += FirmwareIAP
 MODULES += Telemetry
+MODULES += PowerManager
 
 # List of optional modules to include
 #OPTMODULES += CameraStab
@@ -111,6 +112,7 @@ ifndef TESTAPP
     SRC += $(OPUAVSYNTHDIR)/txpidsettings.c
     SRC += $(OPUAVSYNTHDIR)/airspeedstate.c
     SRC += $(OPUAVSYNTHDIR)/mpu6000settings.c
+    SRC += $(OPUAVSYNTHDIR)/flightbatterystate.c
 else
     ## Test Code
     SRC += $(OPTESTS)/test_common.c

@@ -163,10 +163,16 @@ void PIOS_ADC_Config(uint32_t oversampling)
                                  PIOS_ADC_SAMPLE_TIME);
     }
 
-#if (PIOS_ADC_USE_TEMP_SENSOR)
+#if defined(PIOS_ADC_USE_TEMP_SENSOR)
     ADC_TempSensorVrefintCmd(ENABLE);
     ADC_RegularChannelConfig(PIOS_ADC_TEMP_SENSOR_ADC, ADC_Channel_16,
                              PIOS_ADC_TEMP_SENSOR_ADC_CHANNEL,
+                             PIOS_ADC_SAMPLE_TIME);
+#endif
+#if defined(PIOS_ADC_USE_VREF_SENSOR)
+    ADC_TempSensorVrefintCmd(ENABLE);
+    ADC_RegularChannelConfig(PIOS_ADC_VREF_SENSOR_ADC, ADC_Channel_17,
+                             PIOS_ADC_VREF_SENSOR_ADC_CHANNEL,
                              PIOS_ADC_SAMPLE_TIME);
 #endif
     // return

@@ -26,6 +26,7 @@
  */
 
 #include "inc/openpilot.h"
+#include <pios_adc_priv.h>
 #include <pios_board_info.h>
 #include <uavobjectsinit.h>
 #include <hwsettings.h>
@@ -69,6 +70,8 @@ uint32_t pios_com_telem_usb_id;
 uintptr_t pios_uavo_settings_fs_id;
 
 uintptr_t pios_user_fs_id = 0;
+
+uint32_t pios_bq24075_id;
 
 /**
  * PIOS_Board_Init()
@@ -161,6 +164,12 @@ void PIOS_Board_Init(void)
     }
 #endif /* PIOS_INCLUDE_SPI && PIOS_INCLUDE_NRF24L01 */
 
+#if defined(PIOS_INCLUDE_BQ24075)
+    if (PIOS_BQ24075_Init(&pios_bq24075_id, pios_gpios_id)) {
+        PIOS_Assert(0);
+    }
+#endif /* PIOS_INCLUDE_BQ20475 */
+
 #if defined(PIOS_INCLUDE_COM)
 #if defined(PIOS_INCLUDE_USB)
 #if defined(PIOS_INCLUDE_USB_HID)
@@ -235,6 +244,11 @@ void PIOS_Board_Init(void)
         pios_rcvr_group_map[MANUALCONTROLSETTINGS_CHANNELGROUPS_OPLINK] = pios_oplinkrcvr_rcvr_id;
     }
 #endif /* PIOS_INCLUDE_OPLINKRCVR */
+
+#if defined(PIOS_INCLUDE_ADC)
+    /* Initialize the ADC channels */
+    PIOS_ADC_Init(&pios_adc_cfg);
+#endif
 
     /* Initialize the motor PWM controls */
     PIOS_Servo_Init(&pios_servo_cfg);

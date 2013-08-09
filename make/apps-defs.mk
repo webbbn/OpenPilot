@@ -90,6 +90,7 @@ SRC += $(PIOSCOMMON)/pios_nrf24l01.c
 SRC += $(PIOSCOMMON)/pios_sbus.c
 SRC += $(PIOSCOMMON)/pios_sdcard.c
 SRC += $(PIOSCOMMON)/pios_led.c
+SRC += $(PIOSCOMMON)/pios_bq24075.c
 
 ## PIOS USB related files
 SRC += $(PIOSCOMMON)/pios_usb_desc_hid_cdc.c

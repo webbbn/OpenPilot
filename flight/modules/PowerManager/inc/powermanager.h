@@ -1,14 +1,14 @@
 /**
  ******************************************************************************
- * @addtogroup PIOS PIOS Core hardware abstraction layer
+ * @addtogroup OpenPilotModules OpenPilot Modules
  * @{
- * @addtogroup   PIOS_NFR24L01 Radio Functions
- * @brief PIOS interface for for the NFR24L01 radio
+ * @addtogroup PowerManagerModule Power Manager Module
  * @{
  *
- * @file       pios_nfr24l01_priv.h
+ * @file       powermanager.h
  * @author     The OpenPilot Team, http://www.openpilot.org Copyright (C) 2013.
- * @brief      Implements a driver the the nfr24l01 radio
+ * @brief      Module to monitor an on-board power manager and control battery charging.
+ *
  * @see        The GNU Public License (GPL) Version 3
  *
  *****************************************************************************/
@@ -27,23 +27,14 @@
  * with this program; if not, write to the Free Software Foundation, Inc.,
  * 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
+#ifndef POWERMANAGER_H
+#define POWERMANAGER_H
 
-#ifndef PIOS_NRR24L01_PRIV_H
-#define PIOS_NRR24L01_PRIV_H
+#include "openpilot.h"
 
-#include <pios_nrf24l01.h>
+int32_t PowerManagerInitialize(void);
 
-/* Global Types */
-struct pios_nrf24l01_cfg {
-    const struct pios_gpio *gpio_cfg; /* Pointer to the GPIO for the CE line */
-    const struct pios_exti_cfg *exti_cfg; /* Pointer to the EXTI configuration */
-};
-
-/* Public Functions */
-extern int32_t PIOS_NRF24L01_Init(uint32_t *nrf24l01_id, uint32_t spi_id, const struct pios_nrf24l01_cfg *cfg);
-extern bool PIOS_NRF24L01_IRQHandler(uint32_t nrf24l01_id);
-
-#endif /* PIOS_NRF24L01_PRIV_H */
+#endif // POWERMANAGER_H
 
 /**
  * @}

@@ -8,7 +8,7 @@
  *
  * @file       pios_nfr24l01.c
  * @author     The OpenPilot Team, http://www.openpilot.org Copyright (C) 2013.
- * @brief      Implements a driver the the nfr24l01 driver
+ * @brief      Implements a driver the the nfr24l01 radio
  * @see        The GNU Public License (GPL) Version 3
  *
  *****************************************************************************/
@@ -308,7 +308,9 @@ uint8_t PIOS_NRF24L01_ReceivePacket(uint32_t nrf24l01_id, uint8_t *buffer, uint8
     xSemaphoreTake(dev->data_ready, max_delay);
 
     // Turn on the Rx LED.
+#ifdef PIOS_LED_RADIO
     PIOS_LED_On(PIOS_LED_RX);
+#endif /* PIOS_LED_RX */
 
     // Disable receive.
     PIOS_NRF24L01_ChipDisable(dev);
@@ -334,7 +336,9 @@ uint8_t PIOS_NRF24L01_ReceivePacket(uint32_t nrf24l01_id, uint8_t *buffer, uint8
     }
 
     // Turn off the Rx LED.
+#ifdef PIOS_LED_RADIO
     PIOS_LED_Off(PIOS_LED_RX);
+#endif
 
     // Clear the interruptions flags
     PIOS_NRF24L01_Write1Reg(dev, PIOS_NRF24L01_REG_STATUS, 0x70);
@@ -356,7 +360,9 @@ uint8_t PIOS_NRF24L01_SendPacket(uint32_t nrf24l01_id, uint8_t *buffer, uint8_t 
 
     // Turn on the Tx LED.
     // PIOS_LED_On(PIOS_LED_TX);
+#ifdef PIOS_LED_RADIO
     PIOS_LED_Toggle(PIOS_LED_TX);
+#endif
 
     // Disable receive.
     PIOS_NRF24L01_ChipDisable(dev);

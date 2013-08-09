@@ -75,7 +75,7 @@ int32_t PIOS_GPIO_Init(uint32_t *gpios_dev_id, const struct pios_gpio_cfg *cfg)
 
 /**
  * Turn on GPIO
- * \param[in] GPIO GPIO id
+ * @param[in] GPIO GPIO id
  */
 void PIOS_GPIO_On(uint32_t gpios_dev_id, uint8_t gpio_id)
 {
@@ -99,7 +99,7 @@ void PIOS_GPIO_On(uint32_t gpios_dev_id, uint8_t gpio_id)
 
 /**
  * Turn off GPIO
- * \param[in] GPIO GPIO id
+ * @param[in] GPIO GPIO id
  */
 void PIOS_GPIO_Off(uint32_t gpios_dev_id, uint8_t gpio_id)
 {
@@ -123,7 +123,7 @@ void PIOS_GPIO_Off(uint32_t gpios_dev_id, uint8_t gpio_id)
 
 /**
  * Toggle GPIO on/off
- * \param[in] GPIO GPIO id
+ * @param[in] GPIO GPIO id
  */
 void PIOS_GPIO_Toggle(uint32_t gpios_dev_id, uint8_t gpio_id)
 {
@@ -151,6 +151,27 @@ void PIOS_GPIO_Toggle(uint32_t gpios_dev_id, uint8_t gpio_id)
             PIOS_GPIO_On(gpios_dev_id, gpio_id);
         }
     }
+}
+
+/**
+ * Check the state of a GPIO line.
+ * @param[in] GPIO GPIO id
+ */
+bool PIOS_GPIO_State(uint32_t gpios_dev_id, uint8_t gpio_id)
+{
+    const struct pios_gpio_cfg *gpio_cfg = (const struct pios_gpio_cfg *)gpios_dev_id;
+
+    PIOS_Assert(gpio_cfg);
+
+    if (gpio_id >= gpio_cfg->num_gpios) {
+        /* GPIO index out of range */
+        return false;
+    }
+
+    const struct pios_gpio *gpio = &(gpio_cfg->gpios[gpio_id]);
+
+    bool is_set = (GPIO_ReadInputDataBit(gpio->pin.gpio, gpio->pin.init.GPIO_Pin) == Bit_SET);
+    return (is_set != gpio->active_low);
 }
 
 #endif /* PIOS_INCLUDE_GPIO */

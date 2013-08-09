@@ -58,7 +58,7 @@
 #define PIOS_INCLUDE_RTC
 #define PIOS_INCLUDE_TIM
 /* #define PIOS_INCLUDE_USART */
-/* #define PIOS_INCLUDE_ADC */
+#define PIOS_INCLUDE_ADC
 #define PIOS_INCLUDE_I2C
 #define PIOS_INCLUDE_SPI
 #define PIOS_INCLUDE_GPIO
@@ -87,6 +87,7 @@
 /* #define PIOS_INCLUDE_MPXV */
 /* #define PIOS_INCLUDE_ETASV3 */
 /* #define PIOS_INCLUDE_HCSR04 */
+#define PIOS_INCLUDE_BQ24075
 
 /* PIOS receiver drivers */
 /* #define PIOS_INCLUDE_PWM */

@@ -35,6 +35,7 @@
 extern void PIOS_GPIO_On(uint32_t gpios_dev_id, uint8_t gpio_id);
 extern void PIOS_GPIO_Off(uint32_t gpios_dev_id, uint8_t gpio_id);
 extern void PIOS_GPIO_Toggle(uint32_t gpios_dev_id, uint8_t gpio_id);
+extern bool PIOS_GPIO_State(uint32_t gpios_dev_id, uint8_t gpio_id);
 
 #endif /* PIOS_GPIO_H */
 

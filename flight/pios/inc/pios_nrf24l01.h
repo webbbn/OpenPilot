@@ -6,7 +6,7 @@
  * @brief PIOS interface for for the NFR24L01 radio
  * @{
  *
- * @file       pios_nfr24l01_priv.h
+ * @file       pios_nfr24l01.h
  * @author     The OpenPilot Team, http://www.openpilot.org Copyright (C) 2013.
  * @brief      Implements a driver the the nfr24l01 radio
  * @see        The GNU Public License (GPL) Version 3
@@ -28,22 +28,24 @@
  * 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
 
-#ifndef PIOS_NRR24L01_PRIV_H
-#define PIOS_NRR24L01_PRIV_H
-
-#include <pios_nrf24l01.h>
+#ifndef PIOS_NRF24L01_H
+#define PIOS_NRF24L01_H
 
 /* Global Types */
-struct pios_nrf24l01_cfg {
-    const struct pios_gpio *gpio_cfg; /* Pointer to the GPIO for the CE line */
-    const struct pios_exti_cfg *exti_cfg; /* Pointer to the EXTI configuration */
+enum pios_nrf24l01_datarate {
+    PIOS_NRF24L01_RATE_250K,
+    PIOS_NRF24L01_RATE_1M,
+    PIOS_NRF24L01_RATE_2M,
 };
 
 /* Public Functions */
-extern int32_t PIOS_NRF24L01_Init(uint32_t *nrf24l01_id, uint32_t spi_id, const struct pios_nrf24l01_cfg *cfg);
-extern bool PIOS_NRF24L01_IRQHandler(uint32_t nrf24l01_id);
+extern void PIOS_NRF24L01_SetDatarate(uint32_t nrf24l01_id, enum pios_nrf24l01_datarate datarate);
+extern void PIOS_NRF24L01_SetChannel(uint32_t nrf24l01_id, uint8_t channel);
+extern void PIOS_NRF24L01_SetAddress(uint32_t nrf24l01_id, uint8_t pipe, const uint8_t *address);
+extern uint8_t PIOS_NRF24L01_ReceivePacket(uint32_t nrf24l01_id, uint8_t *buffer, uint8_t len, portTickType max_delay);
+extern uint8_t PIOS_NRF24L01_SendPacket(uint32_t nrf24l01_id, uint8_t *buffer, uint8_t len);
 
-#endif /* PIOS_NRF24L01_PRIV_H */
+#endif /* PIOS_NRF24L01_H */
 
 /**
  * @}

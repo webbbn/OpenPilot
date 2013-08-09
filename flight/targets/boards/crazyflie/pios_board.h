@@ -82,12 +82,17 @@
 // GPIO
 // -------------------------
 #define PIOS_GPIO_USB_ENABLE    0
+#define PIOS_GPIO_PM_PGOOD      1
+#define PIOS_GPIO_PM_CHG        2
+#define PIOS_GPIO_PM_EN1        3
+#define PIOS_GPIO_PM_EN2        4
+#define PIOS_GPIO_PM_SYSOFF     5
 
 // ------------------------
 // PIOS_LED
 // ------------------------
 #define PIOS_LED_HEARTBEAT      0
-#define PIOS_LED_RADIO          1
+#define PIOS_LED_ALARM          1
 #define PIOS_LED_RX             PIOS_LED_RADIO
 #define PIOS_LED_TX             PIOS_LED_RADIO
 
@@ -157,23 +162,32 @@ extern uint32_t pios_com_debug_id;
 
 // -------------------------
 // ADC
-// None
+// PIOS_ADC_PinGet(0) = Gyro Z
+// PIOS_ADC_PinGet(1) = Gyro Y
+// PIOS_ADC_PinGet(2) = Gyro X
 // -------------------------
-// #define PIOS_ADC_OVERSAMPLING_RATE		1
-#define PIOS_ADC_USE_TEMP_SENSOR         0
-#define PIOS_ADC_TEMP_SENSOR_ADC         ADC1
-#define PIOS_ADC_TEMP_SENSOR_ADC_CHANNEL 1
+#define PIOS_ADC_USE_VREF_SENSOR         1
+#define PIOS_ADC_VREF_SENSOR_ADC         ADC1
+#define PIOS_ADC_VREF_SENSOR_ADC_CHANNEL 1
+#define PIOS_ADC_VREF_ADC_PIN            0
 
-#define PIOS_ADC_NUM_PINS                0
+#define PIOS_ADC_BAT_GPIO_PORT           GPIOA                   // PA3 (Battery)
+#define PIOS_ADC_BAT_GPIO_PIN            GPIO_Pin_3              // ADC12_IN3
+#define PIOS_ADC_BAT_GPIO_CHANNEL        ADC_Channel_3
+#define PIOS_ADC_BAT_ADC                 ADC2
+#define PIOS_ADC_BAT_ADC_NUMBER          1
+#define PIOS_ADC_BAT_ADC_PIN             1
 
-#define PIOS_ADC_PORTS                   {}
-#define PIOS_ADC_PINS                    {}
-#define PIOS_ADC_CHANNELS                {}
-#define PIOS_ADC_MAPPING                 {}
-#define PIOS_ADC_CHANNEL_MAPPING         {}
-#define PIOS_ADC_NUM_CHANNELS            (PIOS_ADC_NUM_PINS + PIOS_ADC_USE_TEMP_SENSOR)
-#define PIOS_ADC_NUM_ADC_CHANNELS        0
-#define PIOS_ADC_USE_ADC2                0
+#define PIOS_ADC_NUM_PINS                1
+
+#define PIOS_ADC_PORTS                   { PIOS_ADC_BAT_GPIO_PORT }
+#define PIOS_ADC_PINS                    { PIOS_ADC_BAT_GPIO_PIN }
+#define PIOS_ADC_CHANNELS                { PIOS_ADC_BAT_GPIO_CHANNEL }
+#define PIOS_ADC_MAPPING                 { PIOS_ADC_BAT_ADC }
+#define PIOS_ADC_CHANNEL_MAPPING         { PIOS_ADC_BAT_ADC_NUMBER }
+#define PIOS_ADC_NUM_CHANNELS            (PIOS_ADC_NUM_PINS + 1)
+#define PIOS_ADC_NUM_ADC_CHANNELS        1
+#define PIOS_ADC_USE_ADC2                1
 #define PIOS_ADC_CLOCK_FUNCTION          RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1 | RCC_APB2Periph_ADC2, ENABLE)
 #define PIOS_ADC_ADCCLK                  RCC_PCLK2_Div8
 /* RCC_PCLK2_Div2: ADC clock = PCLK2/2 */
@@ -190,7 +204,7 @@ extern uint32_t pios_com_debug_id;
 // Currently analog acquistion hard coded at 480 Hz
 // PCKL2 = HCLK / 16
 // ADCCLK = PCLK2 / 2
-#define PIOS_ADC_RATE                    (72.0e6 / 1.0 / 8.0 / 252.0 / (PIOS_ADC_NUM_CHANNELS >> PIOS_ADC_USE_ADC2))
+#define PIOS_ADC_RATE                    (72.0e6f / 1.0f / 8.0f / 252.0f / (PIOS_ADC_NUM_CHANNELS >> PIOS_ADC_USE_ADC2))
 #define PIOS_ADC_MAX_OVERSAMPLING        36
 
 // ------------------------
@@ -228,5 +242,12 @@ extern uint32_t pios_com_debug_id;
 #define PIOS_USB_DETECT_GPIO_PORT    GPIOC
 #define PIOS_USB_MAX_DEVS            1
 #define PIOS_USB_DETECT_GPIO_PIN     GPIO_Pin_15
+
+// -------------------------
+// Power Management
+// -------------------------
+extern uint32_t pios_bq24075_id;
+#define PIOS_PM_GPIO_ID (pios_gpios_id)
+#define PIOS_BQ24075_ID (pios_bq24075_id)
 
 #endif /* PIOS_BOARD_H */
