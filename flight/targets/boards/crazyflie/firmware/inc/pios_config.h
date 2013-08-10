@@ -154,7 +154,7 @@
 #define HEAP_LIMIT_CRITICAL             40
 #define IRQSTACK_LIMIT_WARNING          100
 #define IRQSTACK_LIMIT_CRITICAL         60
-#define CPULOAD_LIMIT_WARNING           85
+#define CPULOAD_LIMIT_WARNING           90
 #define CPULOAD_LIMIT_CRITICAL          95
 
 /* Task stack sizes */

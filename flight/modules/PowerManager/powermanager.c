@@ -146,15 +146,13 @@ static void onTimer(__attribute__((unused)) UAVObjEvent *ev)
     FlightBatteryStateSet(&flightBatteryData);
 
     if (charge == 1) {
-        AlarmsSet(SYSTEMALARMS_ALARM_BATTERY, SYSTEMALARMS_ALARM_ERROR);
+        AlarmsSet(SYSTEMALARMS_ALARM_BATTERY, SYSTEMALARMS_ALARM_WARNING);
     } else if (charge == 0) {
         AlarmsSet(SYSTEMALARMS_ALARM_BATTERY, SYSTEMALARMS_ALARM_ERROR);
+    } else {
+        AlarmsSet(SYSTEMALARMS_ALARM_BATTERY, SYSTEMALARMS_ALARM_OK);
     }
 }
-
-/**
- * @}
- */
 
 /**
  * @}
