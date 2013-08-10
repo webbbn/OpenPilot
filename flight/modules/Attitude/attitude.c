@@ -66,7 +66,7 @@
 
 // Private constants
 #define STACK_SIZE_BYTES 540
-#define TASK_PRIORITY    (tskIDLE_PRIORITY + 3)
+#define TASK_PRIORITY    (tskIDLE_PRIORITY + 4)
 
 #define SENSOR_PERIOD    4
 #define UPDATE_RATE      25.0f
